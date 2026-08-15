@@ -3,6 +3,7 @@ using Confer.Application.Interfaces;
 using Confer.Domain.Identity;
 using Confer.Domain.Meetings;
 using Confer.Domain.Sessions;
+using Confer.Domain.Webhooks;
 using Microsoft.EntityFrameworkCore;
 
 namespace Confer.Infrastructure.Persistence;
@@ -21,6 +22,7 @@ public sealed class ConferDbContext(DbContextOptions<ConferDbContext> options)
     public DbSet<PollVote> PollVotes => Set<PollVote>();
     public DbSet<BreakoutRoom> BreakoutRooms => Set<BreakoutRoom>();
     public DbSet<MeetingSummary> MeetingSummaries => Set<MeetingSummary>();
+    public DbSet<WebhookSubscription> WebhookSubscriptions => Set<WebhookSubscription>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -55,6 +57,15 @@ public sealed class ConferDbContext(DbContextOptions<ConferDbContext> options)
                 policyBuilder.Property(p => p.AllowUnmuteSelf).HasDefaultValue(true);
                 policyBuilder.Property(p => p.MuteOnEntry).HasDefaultValue(false);
                 policyBuilder.Property(p => p.AllowRename).HasDefaultValue(true);
+            });
+
+            builder.OwnsOne(m => m.LiveStreamConfig, streamBuilder =>
+            {
+                streamBuilder.Property(s => s.IsStreamingEnabled);
+                streamBuilder.Property(s => s.RtmpUrl).HasMaxLength(500);
+                streamBuilder.Property(s => s.StreamKey).HasMaxLength(255);
+                streamBuilder.Property(s => s.Status).HasConversion<string>().HasMaxLength(32);
+                streamBuilder.Property(s => s.StartedAt);
             });
 
             builder.HasMany(m => m.Sessions)
@@ -189,6 +200,22 @@ public sealed class ConferDbContext(DbContextOptions<ConferDbContext> options)
                 .HasConversion(
                     v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                     v => JsonSerializer.Deserialize<List<ActionItem>>(v, (JsonSerializerOptions?)null) ?? new List<ActionItem>()
+                );
+        });
+
+        modelBuilder.Entity<WebhookSubscription>(builder =>
+        {
+            builder.ToTable("webhook_subscriptions");
+            builder.HasKey(w => w.Id);
+            builder.Property(w => w.TargetUrl).IsRequired().HasMaxLength(1000);
+            builder.Property(w => w.Secret).IsRequired().HasMaxLength(255);
+            builder.Property(w => w.IsActive).HasDefaultValue(true);
+            builder.HasIndex(w => w.UserId);
+
+            builder.Property(w => w.SubscribedEvents)
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>()
                 );
         });
     }

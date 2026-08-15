@@ -19,6 +19,8 @@ public sealed class Meeting
     public string RecordingMode { get; private set; } = "disabled";
     public bool IsRecording { get; private set; }
     public DateTime? RecordingStartedAt { get; private set; }
+    public LiveStreamConfig LiveStreamConfig { get; private set; } = LiveStreamConfig.Default;
+    public bool IsLiveStreaming => LiveStreamConfig.Status == LiveStreamStatus.Live;
     public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
     public DateTime? EndedAt { get; private set; }
 
@@ -229,6 +231,53 @@ public sealed class Meeting
         return Result.Success(activeRecording);
     }
 
+    public Result<LiveStreamConfig> StartLiveStream(Guid actorId, string rtmpUrl, string streamKey)
+    {
+        if (EndedAt.HasValue)
+            return Result.Failure<LiveStreamConfig>(MeetingErrors.Ended);
+
+        if (actorId != OwnerId)
+            return Result.Failure<LiveStreamConfig>(MeetingErrors.Unauthorized);
+
+        if (string.IsNullOrWhiteSpace(rtmpUrl))
+            return Result.Failure<LiveStreamConfig>(Error.Validation("LiveStream.InvalidRtmpUrl", "RTMP URL cannot be empty."));
+
+        if (string.IsNullOrWhiteSpace(streamKey))
+            return Result.Failure<LiveStreamConfig>(Error.Validation("LiveStream.InvalidStreamKey", "Stream key cannot be empty."));
+
+        if (LiveStreamConfig.Status == LiveStreamStatus.Live)
+            return Result.Failure<LiveStreamConfig>(MeetingErrors.AlreadyStreaming);
+
+        LiveStreamConfig = new LiveStreamConfig(
+            isStreamingEnabled: true,
+            rtmpUrl: rtmpUrl.Trim(),
+            streamKey: streamKey.Trim(),
+            status: LiveStreamStatus.Live,
+            startedAt: DateTime.UtcNow
+        );
+
+        return Result.Success(LiveStreamConfig);
+    }
+
+    public Result<LiveStreamConfig> StopLiveStream(Guid actorId)
+    {
+        if (actorId != OwnerId)
+            return Result.Failure<LiveStreamConfig>(MeetingErrors.Unauthorized);
+
+        if (LiveStreamConfig.Status != LiveStreamStatus.Live)
+            return Result.Failure<LiveStreamConfig>(MeetingErrors.NotStreaming);
+
+        LiveStreamConfig = new LiveStreamConfig(
+            isStreamingEnabled: false,
+            rtmpUrl: LiveStreamConfig.RtmpUrl,
+            streamKey: string.Empty,
+            status: LiveStreamStatus.Idle,
+            startedAt: null
+        );
+
+        return Result.Success(LiveStreamConfig);
+    }
+
     public Result End(Guid actorId)
     {
         if (actorId != OwnerId)
@@ -239,6 +288,17 @@ public sealed class Meeting
             IsRecording = false;
             var activeRecording = Recordings.LastOrDefault(r => r.Status == Enums.RecordingStatus.Recording);
             activeRecording?.Complete(string.Empty, 0);
+        }
+
+        if (LiveStreamConfig.Status == LiveStreamStatus.Live)
+        {
+            LiveStreamConfig = new LiveStreamConfig(
+                isStreamingEnabled: false,
+                rtmpUrl: LiveStreamConfig.RtmpUrl,
+                streamKey: string.Empty,
+                status: LiveStreamStatus.Idle,
+                startedAt: null
+            );
         }
 
         EndedAt = DateTime.UtcNow;

@@ -10,6 +10,8 @@ using Confer.Application.Meetings.Governance.AdmitParticipant;
 using Confer.Application.Meetings.Governance.RejectParticipant;
 using Confer.Application.Meetings.Governance.ToggleWaitingRoom;
 using Confer.Application.Meetings.Governance.UpdatePolicy;
+using Confer.Application.Meetings.Stream.StartLiveStream;
+using Confer.Application.Meetings.Stream.StopLiveStream;
 using Confer.Domain.Enums;
 using Confer.Shared.Application.Interfaces;
 using Microsoft.AspNetCore.Http;
@@ -304,6 +306,26 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
                         }
                     }
                     break;
+
+                case "start_stream":
+                    if (claims.Role == ParticipantRole.Host || claims.Role == ParticipantRole.CoHost)
+                    {
+                        var rtmpUrl = node["rtmp_url"]?.GetValue<string>() ?? string.Empty;
+                        var streamKey = node["stream_key"]?.GetValue<string>() ?? string.Empty;
+                        using var scope = _serviceProvider.CreateScope();
+                        var dispatcher = scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
+                        await dispatcher.SendAsync(new StartLiveStreamCommand(claims.MeetingId, claims.UserId, rtmpUrl, streamKey));
+                    }
+                    break;
+
+                case "stop_stream":
+                    if (claims.Role == ParticipantRole.Host || claims.Role == ParticipantRole.CoHost)
+                    {
+                        using var scope = _serviceProvider.CreateScope();
+                        var dispatcher = scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
+                        await dispatcher.SendAsync(new StopLiveStreamCommand(claims.MeetingId, claims.UserId));
+                    }
+                    break;
             }
         }
         catch (Exception ex)
@@ -470,6 +492,16 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
         {
             ["type"] = "participant_admitted",
             ["participant_id"] = participantId.ToString()
+        });
+
+    public Task BroadcastStreamStatusAsync(Guid meetingId, bool isStreaming, string rtmpUrl, string status, DateTime? startedAt = null) =>
+        BroadcastToRoomAsync(meetingId, new JsonObject
+        {
+            ["type"] = "live_stream_status",
+            ["is_streaming"] = isStreaming,
+            ["rtmp_url"] = rtmpUrl,
+            ["status"] = status,
+            ["started_at"] = startedAt?.ToString("o")
         });
 
     private async Task BroadcastToRoomAsync(Guid meetingId, JsonObject json, Guid? excludeParticipantId = null)

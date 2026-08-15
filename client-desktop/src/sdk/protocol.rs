@@ -233,6 +233,11 @@ pub enum ClientMessage {
     ToggleWaitingRoom {
         enabled: bool,
     },
+    StartStream {
+        rtmp_url: String,
+        stream_key: String,
+    },
+    StopStream,
     Ping {
         seq: u64,
     },
@@ -314,6 +319,14 @@ pub enum ServerMessage {
     },
     MeetingPolicyChanged {
         policy: MeetingPolicyDto,
+    },
+    LiveStreamStatus {
+        is_streaming: bool,
+        #[serde(default)]
+        rtmp_url: String,
+        status: String,
+        #[serde(default)]
+        started_at: Option<String>,
     },
     MeetingEnded {
         reason: String,
@@ -648,6 +661,81 @@ mod tests {
                 assert!(p.watermark_enabled);
             }
             _ => panic!("Expected MeetingPolicyChanged"),
+        }
+    }
+
+    #[test]
+    fn test_live_stream_client_messages_serialization() {
+        let start_msg = ClientMessage::StartStream {
+            rtmp_url: "rtmp://live.youtube.com/app".to_string(),
+            stream_key: "live_secret_key_123".to_string(),
+        };
+        let start_json = serde_json::to_string(&start_msg).expect("Serialize StartStream");
+        assert!(start_json.contains(r#""type":"start_stream""#));
+        assert!(start_json.contains("rtmp://live.youtube.com/app"));
+        assert!(start_json.contains("live_secret_key_123"));
+
+        let parsed_start: ClientMessage = serde_json::from_str(&start_json).expect("Deserialize StartStream");
+        match parsed_start {
+            ClientMessage::StartStream { rtmp_url, stream_key } => {
+                assert_eq!(rtmp_url, "rtmp://live.youtube.com/app");
+                assert_eq!(stream_key, "live_secret_key_123");
+            }
+            _ => panic!("Expected StartStream"),
+        }
+
+        let stop_msg = ClientMessage::StopStream;
+        let stop_json = serde_json::to_string(&stop_msg).expect("Serialize StopStream");
+        assert_eq!(stop_json, r#"{"type":"stop_stream"}"#);
+
+        let parsed_stop: ClientMessage = serde_json::from_str(&stop_json).expect("Deserialize StopStream");
+        match parsed_stop {
+            ClientMessage::StopStream => {}
+            _ => panic!("Expected StopStream"),
+        }
+    }
+
+    #[test]
+    fn test_live_stream_server_messages_serialization_and_deserialization() {
+        let live_status_msg = ServerMessage::LiveStreamStatus {
+            is_streaming: true,
+            rtmp_url: "rtmp://a.rtmp.youtube.com/live2".to_string(),
+            status: "live".to_string(),
+            started_at: Some("2026-08-14T20:30:00Z".to_string()),
+        };
+        let live_json = serde_json::to_string(&live_status_msg).expect("Serialize LiveStreamStatus");
+        assert!(live_json.contains(r#""type":"live_stream_status""#));
+        assert!(live_json.contains(r#""is_streaming":true"#));
+        assert!(live_json.contains("rtmp://a.rtmp.youtube.com/live2"));
+        assert!(live_json.contains(r#""status":"live""#));
+
+        let parsed_live: ServerMessage = serde_json::from_str(&live_json).expect("Deserialize LiveStreamStatus");
+        match parsed_live {
+            ServerMessage::LiveStreamStatus { is_streaming, rtmp_url, status, started_at } => {
+                assert!(is_streaming);
+                assert_eq!(rtmp_url, "rtmp://a.rtmp.youtube.com/live2");
+                assert_eq!(status, "live");
+                assert_eq!(started_at, Some("2026-08-14T20:30:00Z".to_string()));
+            }
+            _ => panic!("Expected LiveStreamStatus"),
+        }
+
+        let idle_status_msg = ServerMessage::LiveStreamStatus {
+            is_streaming: false,
+            rtmp_url: "".to_string(),
+            status: "idle".to_string(),
+            started_at: None,
+        };
+        let idle_json = serde_json::to_string(&idle_status_msg).expect("Serialize Idle LiveStreamStatus");
+        let parsed_idle: ServerMessage = serde_json::from_str(&idle_json).expect("Deserialize Idle LiveStreamStatus");
+        match parsed_idle {
+            ServerMessage::LiveStreamStatus { is_streaming, rtmp_url, status, started_at } => {
+                assert!(!is_streaming);
+                assert_eq!(rtmp_url, "");
+                assert_eq!(status, "idle");
+                assert_eq!(started_at, None);
+            }
+            _ => panic!("Expected LiveStreamStatus"),
         }
     }
 }

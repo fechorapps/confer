@@ -19,4 +19,6 @@ public static class MeetingErrors
     public static readonly Error SummaryNotFound = Error.NotFound("Meeting.SummaryNotFound", "The meeting summary was not found.");
     public static readonly Error MeetingNotEnded = Error.Conflict("Meeting.MeetingNotEnded", "Meeting must be ended before generating a summary.");
     public static readonly Error AlreadyGenerating = Error.Conflict("Meeting.AlreadyGenerating", "A summary is already being generated or exists for this meeting.");
+    public static readonly Error AlreadyStreaming = Error.Conflict("Meeting.AlreadyStreaming", "The meeting is already being live streamed.");
+    public static readonly Error NotStreaming = Error.Conflict("Meeting.NotStreaming", "The meeting is not currently being live streamed.");
 }

@@ -19,13 +19,19 @@ using Confer.Application.Meetings.Polls.GetPolls;
 using Confer.Application.Meetings.Polls.SubmitPollVote;
 using Confer.Application.Meetings.StartRecording;
 using Confer.Application.Meetings.StopRecording;
+using Confer.Application.Meetings.Stream.GetLiveStreamStatus;
+using Confer.Application.Meetings.Stream.StartLiveStream;
+using Confer.Application.Meetings.Stream.StopLiveStream;
+using Confer.Application.Interfaces;
 using Confer.Application.Meetings.Summary;
+using Confer.Domain.Meetings;
 using Confer.Shared.Api;
 using Confer.Shared.Application.Interfaces;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
 
 namespace Confer.Api.Endpoints.Meetings;
 
@@ -68,6 +74,14 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
         group.MapGet("/{id:guid}/waiting-room", GetWaitingRoom).WithName("GetWaitingRoom");
         group.MapPost("/{id:guid}/policies", UpdateMeetingPolicy).WithName("UpdateMeetingPolicy");
         group.MapGet("/{id:guid}/policies", GetMeetingPolicy).WithName("GetMeetingPolicy");
+
+        // Live Streaming & RTMP Broadcast
+        group.MapPost("/{id:guid}/stream/start", StartLiveStream).WithName("StartLiveStream");
+        group.MapPost("/{id:guid}/stream/stop", StopLiveStream).WithName("StopLiveStream");
+        group.MapGet("/{id:guid}/stream", GetLiveStreamStatus).WithName("GetLiveStreamStatus");
+
+        // iCalendar (.ics)
+        group.MapGet("/{id:guid}/calendar.ics", GetMeetingCalendarIcs).WithName("GetMeetingCalendarIcs");
     }
 
     public record CreateMeetingRequest(
@@ -83,6 +97,8 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
     public record LockMeetingRequest(Guid ActorId, bool Lock);
     public record StartRecordingRequest(Guid ActorId);
     public record StopRecordingRequest(Guid ActorId);
+    public record StartLiveStreamRequest(Guid ActorId, string RtmpUrl, string StreamKey);
+    public record StopLiveStreamRequest(Guid ActorId);
     public record GenerateMeetingSummaryRequest(Guid ActorId, bool ForceRegenerate = false);
     public record CreatePollRequest(Guid CreatorId, string Question, List<string> Options, bool IsAnonymous = false, bool IsMultiChoice = false);
     public record SubmitPollVoteRequest(Guid VoterId, List<Guid> OptionIds);
@@ -374,6 +390,62 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
         var query = new GetMeetingPolicyQuery(id);
         var result = await dispatcher.QueryAsync(query, ct);
         return OkOrFailure(result);
+    }
+
+    private static async Task<IResult> StartLiveStream(
+        Guid id,
+        [FromBody] StartLiveStreamRequest request,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var command = new StartLiveStreamCommand(id, request.ActorId, request.RtmpUrl, request.StreamKey);
+        var result = await dispatcher.SendAsync(command, ct);
+        return OkOrFailure(result);
+    }
+
+    private static async Task<IResult> StopLiveStream(
+        Guid id,
+        [FromBody] StopLiveStreamRequest request,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var command = new StopLiveStreamCommand(id, request.ActorId);
+        var result = await dispatcher.SendAsync(command, ct);
+        return OkOrFailure(result);
+    }
+
+    private static async Task<IResult> GetLiveStreamStatus(
+        Guid id,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var query = new GetLiveStreamStatusQuery(id);
+        var result = await dispatcher.QueryAsync(query, ct);
+        return OkOrFailure(result);
+    }
+
+    private static async Task<IResult> GetMeetingCalendarIcs(
+        [FromRoute] Guid id,
+        [FromServices] IConferDbContext dbContext,
+        [FromServices] ICalendarService calendarService,
+        HttpContext httpContext,
+        CancellationToken ct)
+    {
+        var meeting = await dbContext.Meetings
+            .FirstOrDefaultAsync(m => m.Id == id, ct);
+
+        if (meeting is null)
+        {
+            return TypedResults.NotFound(new { Code = "Meeting.NotFound", Description = "The meeting was not found." });
+        }
+
+        var organizer = await dbContext.Users
+            .FirstOrDefaultAsync(u => u.Id == meeting.OwnerId, ct);
+
+        var baseUrl = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}";
+        var icsContent = calendarService.GenerateMeetingIcs(meeting, organizer, baseUrl);
+
+        return Results.Content(icsContent, "text/calendar; charset=utf-8");
     }
 
     private static IResult HandleFailure(Confer.Shared.Results.Error error) =>

@@ -45,3 +45,10 @@ public enum RecordingStatus
     Completed = 4,
     Failed = 5
 }
+
+public enum LiveStreamStatus
+{
+    Idle = 0,
+    Live = 1,
+    Failed = 2
+}

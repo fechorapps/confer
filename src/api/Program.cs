@@ -44,6 +44,11 @@ using (var scope = app.Services.CreateScope())
         try { await db.Database.ExecuteSqlRawAsync(@"ALTER TABLE ""meetings"" ADD COLUMN ""Policy_AllowRename"" INTEGER NOT NULL DEFAULT 1;"); } catch { }
         try { await db.Database.ExecuteSqlRawAsync(@"ALTER TABLE ""participations"" ADD COLUMN ""Status"" TEXT NOT NULL DEFAULT 'Admitted';"); } catch { }
         try { await db.Database.ExecuteSqlRawAsync(@"ALTER TABLE ""participations"" ADD COLUMN ""AdmittedAt"" TEXT NULL;"); } catch { }
+        try { await db.Database.ExecuteSqlRawAsync(@"ALTER TABLE ""meetings"" ADD COLUMN ""LiveStreamConfig_IsStreamingEnabled"" INTEGER NOT NULL DEFAULT 0;"); } catch { }
+        try { await db.Database.ExecuteSqlRawAsync(@"ALTER TABLE ""meetings"" ADD COLUMN ""LiveStreamConfig_RtmpUrl"" TEXT NOT NULL DEFAULT '';"); } catch { }
+        try { await db.Database.ExecuteSqlRawAsync(@"ALTER TABLE ""meetings"" ADD COLUMN ""LiveStreamConfig_StreamKey"" TEXT NOT NULL DEFAULT '';"); } catch { }
+        try { await db.Database.ExecuteSqlRawAsync(@"ALTER TABLE ""meetings"" ADD COLUMN ""LiveStreamConfig_Status"" TEXT NOT NULL DEFAULT 'Idle';"); } catch { }
+        try { await db.Database.ExecuteSqlRawAsync(@"ALTER TABLE ""meetings"" ADD COLUMN ""LiveStreamConfig_StartedAt"" TEXT NULL;"); } catch { }
 
         await db.Database.ExecuteSqlRawAsync(@"
             CREATE TABLE IF NOT EXISTS ""polls"" (
@@ -105,6 +110,17 @@ using (var scope = app.Services.CreateScope())
                 CONSTRAINT ""FK_meeting_summaries_meetings_MeetingId"" FOREIGN KEY (""MeetingId"") REFERENCES ""meetings"" (""Id"") ON DELETE CASCADE
             );
             CREATE UNIQUE INDEX IF NOT EXISTS ""IX_meeting_summaries_MeetingId"" ON ""meeting_summaries"" (""MeetingId"");
+
+            CREATE TABLE IF NOT EXISTS ""webhook_subscriptions"" (
+                ""Id"" TEXT NOT NULL PRIMARY KEY,
+                ""UserId"" TEXT NOT NULL,
+                ""TargetUrl"" TEXT NOT NULL,
+                ""Secret"" TEXT NOT NULL,
+                ""SubscribedEvents"" TEXT NOT NULL,
+                ""IsActive"" INTEGER NOT NULL DEFAULT 1,
+                ""CreatedAt"" TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS ""IX_webhook_subscriptions_UserId"" ON ""webhook_subscriptions"" (""UserId"");
         ");
     }
 

@@ -21,4 +21,5 @@ public interface ISignalingNotifier
     Task BroadcastWaitingRoomUpdateAsync(Guid meetingId, bool isWaitingRoomEnabled, int waitingCount);
     Task BroadcastPolicyChangedAsync(Guid meetingId, MeetingPolicyDto policy, bool isWatermarkEnabled = false, bool isWaitingRoomEnabled = false);
     Task BroadcastParticipantAdmittedAsync(Guid meetingId, Guid participantId);
+    Task BroadcastStreamStatusAsync(Guid meetingId, bool isStreaming, string rtmpUrl, string status, DateTime? startedAt = null);
 }

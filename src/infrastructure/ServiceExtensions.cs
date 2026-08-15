@@ -48,6 +48,13 @@ public static class ServiceExtensions
         // Recording & Archival Storage
         services.AddSingleton<Confer.Application.Interfaces.IRecordingStorageService, Persistence.LocalDiskRecordingStorage>();
 
+        // HTTP Client & Developer Webhooks Engine
+        services.AddHttpClient();
+        services.AddScoped<IWebhookDispatcher, Webhooks.HmacWebhookDispatcher>();
+
+        // iCalendar (.ics) Generator
+        services.AddSingleton<ICalendarService, Calendar.IcsCalendarGenerator>();
+
         return services;
     }
 }
