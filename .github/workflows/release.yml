@@ -1,0 +1,190 @@
+name: Confer Multi-Platform Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release Version (e.g. 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  CARGO_TERM_COLOR: always
+  DOTNET_NOLOGO: true
+
+jobs:
+  # -------------------------------------------------------------
+  # 1. Build Backend Server (.NET 10 Self-Contained)
+  # -------------------------------------------------------------
+  build-server:
+    name: Build Server Binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish Linux x64 Server
+        run: |
+          dotnet publish src/api/Api.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o dist/server-linux-x64
+          tar -czvf dist/confer-server-linux-x64.tar.gz -C dist server-linux-x64
+
+      - name: Publish Windows x64 Server
+        run: |
+          dotnet publish src/api/Api.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o dist/server-win-x64
+          tar -czvf dist/confer-server-win-x64.tar.gz -C dist server-win-x64
+
+      - name: Upload Server Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-binaries
+          path: dist/confer-server-*.tar.gz
+
+  # -------------------------------------------------------------
+  # 2. Build Linux Desktop Client (.deb & .tar.gz)
+  # -------------------------------------------------------------
+  build-desktop-linux:
+    name: Build Linux Desktop (.deb & .tar.gz)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libpulse-dev libclang-dev libpipewire-0.3-dev libspa-0.2-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Debian Package
+        run: ./packaging/linux/build-deb.sh "${{ github.ref_name || inputs.version }}"
+
+      - name: Build Standalone Tarball
+        run: ./packaging/linux/build-tarball.sh "${{ github.ref_name || inputs.version }}"
+
+      - name: Upload Linux Desktop Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux
+          path: |
+            dist/*.deb
+            dist/*.tar.gz
+
+  # -------------------------------------------------------------
+  # 3. Build Windows Desktop Client (.exe & .zip)
+  # -------------------------------------------------------------
+  build-desktop-windows:
+    name: Build Windows Desktop (.zip)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Windows Release Binary
+        run: cargo build --release --manifest-path client-desktop/Cargo.toml
+
+      - name: Package Windows Bundle
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/confer-desktop-windows-x64
+          Copy-Item client-desktop/target/release/confer-desktop.exe dist/confer-desktop-windows-x64/
+          Compress-Archive -Path dist/confer-desktop-windows-x64 -DestinationPath dist/confer-desktop-windows-x64.zip
+
+      - name: Upload Windows Desktop Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows
+          path: dist/confer-desktop-windows-x64.zip
+
+  # -------------------------------------------------------------
+  # 4. Build macOS Desktop Client (.dmg / .zip)
+  # -------------------------------------------------------------
+  build-desktop-macos:
+    name: Build macOS Desktop
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Build macOS Universal Binary
+        run: |
+          cargo build --release --manifest-path client-desktop/Cargo.toml --target aarch64-apple-darwin
+          cargo build --release --manifest-path client-desktop/Cargo.toml --target x86_64-apple-darwin
+          mkdir -p dist/confer-desktop-macos-universal
+          lipo -create -output dist/confer-desktop-macos-universal/confer-desktop \
+            client-desktop/target/aarch64-apple-darwin/release/confer-desktop \
+            client-desktop/target/x86_64-apple-darwin/release/confer-desktop
+          tar -czvf dist/confer-desktop-macos-universal.tar.gz -C dist confer-desktop-macos-universal
+
+      - name: Upload macOS Desktop Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos
+          path: dist/confer-desktop-macos-universal.tar.gz
+
+  # -------------------------------------------------------------
+  # 5. Publish Consolidated GitHub Release
+  # -------------------------------------------------------------
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-server, build-desktop-linux, build-desktop-windows, build-desktop-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate SHA256 Checksums
+        run: |
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/*
+          name: Confer Release ${{ github.ref_name || inputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## 🚀 Confer High-Performance Video Collaboration Platform
+            
+            Welcome to the official release of **Confer**!
+            
+            ### 📦 Binaries & Installers:
+            - **Linux Desktop**: `.deb` package (Debian/Ubuntu/Pop_OS) and standalone `.tar.gz`
+            - **Windows Desktop**: `.zip` standalone bundle with DirectX/Vulkan GPU acceleration
+            - **macOS Desktop**: Universal binary `.tar.gz` (Apple Silicon M1/M2/M3/M4 & Intel x64)
+            - **Backend Server**: Self-contained single-file `.NET 10` binaries for Linux and Windows
+            
+            ### 🛡️ Integrity Checksums:
+            See `SHA256SUMS.txt` for cryptographic asset hashes.

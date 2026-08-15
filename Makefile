@@ -104,6 +104,24 @@ docker-logs: ## Follow logs from all Docker services
 	docker compose logs -f
 
 # ==============================================================================
+# Packaging & Distribution
+# ==============================================================================
+
+package-deb: ## Build Debian package (.deb) for Linux desktop
+	@echo "$(CYAN)Building .deb package for Confer Desktop...$(RESET)"
+	./packaging/linux/build-deb.sh 1.0.0
+
+package-tarball: ## Build standalone Linux tarball (.tar.gz) with installer
+	@echo "$(CYAN)Building standalone Linux tarball...$(RESET)"
+	./packaging/linux/build-tarball.sh 1.0.0
+
+package-backend: ## Build self-contained single-file backend servers (Linux & Windows)
+	@echo "$(CYAN)Building self-contained backend servers...$(RESET)"
+	./packaging/build-backend.sh 1.0.0
+
+package-all: package-deb package-tarball package-backend ## Build all release packages and installers
+
+# ==============================================================================
 # Cleanup
 # ==============================================================================
 
@@ -114,4 +132,6 @@ clean: ## Clean all build artifacts across .NET, Rust, and Gradle
 	@rm -rf client-desktop/target 2>/dev/null || true
 	@echo "$(YELLOW)Cleaning Mobile build directories...$(RESET)"
 	@rm -rf mobile/app/build mobile/.gradle 2>/dev/null || true
+	@rm -rf dist 2>/dev/null || true
 	@echo "$(GREEN)Clean complete!$(RESET)"
+

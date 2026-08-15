@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Confer
+GenericName=Video Conferencing
+Comment=High-Performance Zero-Delay Real-Time Video Collaboration Platform
+Exec=confer-desktop %u
+Icon=confer
+Terminal=false
+Type=Application
+Categories=Network;AudioVideo;VideoConference;Telephony;
+Keywords=zoom;meet;video;conference;calling;collaboration;webrtc;
+MimeType=x-scheme-handler/confer;
+StartupNotify=true
+StartupWMClass=confer-desktop

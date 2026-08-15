@@ -23,7 +23,9 @@ local.properties
 .cxx/
 
 # Data & OS
+dist/
 recordings/
 *.log
 .DS_Store
 Thumbs.db
+
