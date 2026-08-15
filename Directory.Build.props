@@ -1,0 +1,19 @@
+<Project>
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <InvariantGlobalization>false</InvariantGlobalization>
+        <ProductName Condition="'$(SolutionName)' != ''">$(SolutionName)</ProductName>
+        <ProductName Condition="'$(SolutionName)' == ''">Confer</ProductName>
+        <RootNamespace>$(ProductName).$(MSBuildProjectName.Replace(" ", "_"))</RootNamespace>
+        <AssemblyName>$(ProductName).$(MSBuildProjectName.Replace(" ", "_"))</AssemblyName>
+        <Company>Confer</Company>
+        <Authors>Confer Team</Authors>
+        <Copyright>© Confer. All rights reserved.</Copyright>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <RepositoryType>git</RepositoryType>
+        <ProduceReferenceAssembly>True</ProduceReferenceAssembly>
+        <Configurations>Development;Production;Staging;Debug;Release</Configurations>
+    </PropertyGroup>
+</Project>

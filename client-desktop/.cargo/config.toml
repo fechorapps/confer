@@ -1,0 +1,7 @@
+[build]
+rustflags = ["-L", "native=/home/fechorapps/.local/lib64", "-C", "link-arg=-Wl,-rpath,/home/fechorapps/.local/lib64"]
+
+[env]
+PKG_CONFIG_PATH = { value = "/home/fechorapps/.local/lib64/pkgconfig", relative = false }
+LIBCLANG_PATH = { value = "/home/fechorapps/.local/lib64", relative = false }
+BINDGEN_EXTRA_CLANG_ARGS = { value = "-I/home/fechorapps/.local/lib/clang/22/include", relative = false }

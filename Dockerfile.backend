@@ -1,0 +1,25 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0-preview AS build
+WORKDIR /src
+
+COPY Directory.Build.props ./
+COPY src/shared/Shared.csproj src/shared/
+COPY src/domain/Domain.csproj src/domain/
+COPY src/application/Application.csproj src/application/
+COPY src/infrastructure/Infrastructure.csproj src/infrastructure/
+COPY src/api/Api.csproj src/api/
+COPY Confer.slnx ./
+
+RUN dotnet restore src/api/Api.csproj
+
+COPY src/ src/
+RUN dotnet publish src/api/Api.csproj -c Release -o /app/publish
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-preview AS final
+WORKDIR /app
+COPY --from=build /app/publish .
+
+EXPOSE 5000
+EXPOSE 10000/udp
+
+ENV ASPNETCORE_URLS=http://+:5000
+ENTRYPOINT ["dotnet", "Confer.Api.dll"]

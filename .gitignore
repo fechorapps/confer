@@ -1,0 +1,29 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+
+# Rust
+target/
+client-desktop/target/
+
+# Android & Gradle
+.gradle/
+build/
+*/build/
+*.apk
+*.aab
+local.properties
+.idea/
+*.iml
+.cxx/
+
+# Data & OS
+recordings/
+*.log
+.DS_Store
+Thumbs.db

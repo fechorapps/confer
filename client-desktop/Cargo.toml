@@ -1,0 +1,30 @@
+[package]
+name = "confer-desktop"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+eframe = { version = "0.29.1", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+egui = "0.29.1"
+tokio = { version = "1.43", features = ["full"] }
+tokio-tungstenite = { version = "0.26", features = ["connect"] }
+futures-util = "0.3"
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.12", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+rfd = "0.15"
+rayon = "1.10"
+thiserror = "2.0"
+libc = "0.2"
+
+# Hardware capture dependencies
+nokhwa = { version = "0.10.11", features = ["input-v4l", "decoding"] }
+ashpd = { version = "0.13.13", features = ["tokio", "screencast"] }
+pipewire = "0.10.0"
+x11rb = { version = "0.14.0", features = ["all-extensions"] }
+zbus = "5.19"

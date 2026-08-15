@@ -1,0 +1,50 @@
+services:
+  confer-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: confer-api
+    ports:
+      - "5000:5000"
+      - "10000:10000/udp"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=confer;Username=confer;Password=confer_secret
+      - ConnectionStrings__Redis=redis:6379
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: confer-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: confer
+      POSTGRES_USER: confer
+      POSTGRES_PASSWORD: confer_secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: confer-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  coturn:
+    image: coturn/coturn:latest
+    container_name: confer-coturn
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+    environment:
+      - TURNSERVER_ARGS=--log-file=stdout --external-ip=127.0.0.1 --realm=confer.local --listening-port=3478 --min-port=49152 --max-port=65535 --fingerprint --lt-cred-mech --user=confer:conferpass
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
