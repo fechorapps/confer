@@ -1,6 +1,6 @@
+use crate::app::{ConferApp, RosterTab};
 use egui::{Color32, RichText, ScrollArea, Stroke, Ui};
 use uuid::Uuid;
-use crate::app::{ConferApp, RosterTab};
 
 pub fn render_roster(app: &mut ConferApp, ui: &mut Ui) {
     let is_host = app.my_role == "host";

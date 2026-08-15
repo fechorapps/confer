@@ -1,8 +1,8 @@
-use std::collections::HashMap;
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes128Gcm, Aes256Gcm, Key, Nonce};
 use hkdf::Hkdf;
 use sha2::Sha256;
+use std::collections::HashMap;
 use thiserror::Error;
 
 /// Supported SFrame AEAD Cipher Suites.
@@ -235,7 +235,11 @@ impl std::fmt::Debug for SFrameKey {
 
 impl SFrameKey {
     /// Creates a new `SFrameKey` directly from raw key bytes and 12-byte Base IV.
-    pub fn new(cipher_suite: CipherSuite, key_bytes: &[u8], base_iv: [u8; 12]) -> Result<Self, SFrameError> {
+    pub fn new(
+        cipher_suite: CipherSuite,
+        key_bytes: &[u8],
+        base_iv: [u8; 12],
+    ) -> Result<Self, SFrameError> {
         if key_bytes.len() != cipher_suite.key_len() {
             return Err(SFrameError::InvalidKeyLength {
                 expected: cipher_suite.key_len(),
@@ -255,7 +259,7 @@ impl SFrameKey {
     pub fn compute_nonce(&self, counter: u64) -> [u8; 12] {
         let mut nonce = self.base_iv;
         let ctr_be = counter.to_be_bytes(); // 8 bytes
-        // XOR the lower 8 bytes (offset 4..12) with counter
+                                            // XOR the lower 8 bytes (offset 4..12) with counter
         for i in 0..8 {
             nonce[4 + i] ^= ctr_be[i];
         }
@@ -275,12 +279,14 @@ impl SFrameKey {
         let hk = Hkdf::<Sha256>::new(Some(salt_bytes), secret);
 
         let mut key = vec![0u8; cipher_suite.key_len()];
-        hk.expand(b"sframe-aead-key", &mut key)
-            .map_err(|e| SFrameError::RatchetFailed(format!("HKDF key expansion failed: {:?}", e)))?;
+        hk.expand(b"sframe-aead-key", &mut key).map_err(|e| {
+            SFrameError::RatchetFailed(format!("HKDF key expansion failed: {:?}", e))
+        })?;
 
         let mut base_iv = [0u8; 12];
-        hk.expand(b"sframe-base-iv", &mut base_iv)
-            .map_err(|e| SFrameError::RatchetFailed(format!("HKDF base IV expansion failed: {:?}", e)))?;
+        hk.expand(b"sframe-base-iv", &mut base_iv).map_err(|e| {
+            SFrameError::RatchetFailed(format!("HKDF base IV expansion failed: {:?}", e))
+        })?;
 
         Ok(Self {
             cipher_suite,
@@ -297,13 +303,15 @@ impl SFrameKey {
 
         let mut next_key = vec![0u8; self.cipher_suite.key_len()];
         let key_info = format!("sframe-ratchet-key-epoch-{}", next_epoch);
-        hk.expand(key_info.as_bytes(), &mut next_key)
-            .map_err(|e| SFrameError::RatchetFailed(format!("HKDF ratchet key expansion failed: {:?}", e)))?;
+        hk.expand(key_info.as_bytes(), &mut next_key).map_err(|e| {
+            SFrameError::RatchetFailed(format!("HKDF ratchet key expansion failed: {:?}", e))
+        })?;
 
         let mut next_iv = [0u8; 12];
         let iv_info = format!("sframe-ratchet-iv-epoch-{}", next_epoch);
-        hk.expand(iv_info.as_bytes(), &mut next_iv)
-            .map_err(|e| SFrameError::RatchetFailed(format!("HKDF ratchet IV expansion failed: {:?}", e)))?;
+        hk.expand(iv_info.as_bytes(), &mut next_iv).map_err(|e| {
+            SFrameError::RatchetFailed(format!("HKDF ratchet IV expansion failed: {:?}", e))
+        })?;
 
         // Mix the previous Base IV with the newly derived IV
         for (dst, src) in next_iv.iter_mut().zip(self.base_iv.iter()) {
@@ -331,15 +339,15 @@ impl SFrameKey {
         let ciphertext_with_tag = match self.cipher_suite {
             CipherSuite::Aes128Gcm => {
                 let cipher = Aes128Gcm::new(Key::<Aes128Gcm>::from_slice(&self.key));
-                cipher
-                    .encrypt(nonce, payload)
-                    .map_err(|e| SFrameError::EncryptionFailed(format!("AES-128-GCM error: {:?}", e)))?
+                cipher.encrypt(nonce, payload).map_err(|e| {
+                    SFrameError::EncryptionFailed(format!("AES-128-GCM error: {:?}", e))
+                })?
             }
             CipherSuite::Aes256Gcm => {
                 let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&self.key));
-                cipher
-                    .encrypt(nonce, payload)
-                    .map_err(|e| SFrameError::EncryptionFailed(format!("AES-256-GCM error: {:?}", e)))?
+                cipher.encrypt(nonce, payload).map_err(|e| {
+                    SFrameError::EncryptionFailed(format!("AES-256-GCM error: {:?}", e))
+                })?
             }
         };
 
@@ -526,7 +534,10 @@ impl SFrameEngine {
 
     /// Creates an engine initialized with a master secret (passphrase or MLS epoch secret)
     /// assigned to Key ID 0.
-    pub fn from_shared_secret(cipher_suite: CipherSuite, secret: &[u8]) -> Result<Self, SFrameError> {
+    pub fn from_shared_secret(
+        cipher_suite: CipherSuite,
+        secret: &[u8],
+    ) -> Result<Self, SFrameError> {
         let key = SFrameKey::derive_from_secret(cipher_suite, secret, None)?;
         let mut engine = Self::new(cipher_suite);
         engine.set_key(0, key);
@@ -596,7 +607,10 @@ impl SFrameEngine {
         raw_frame_payload: &[u8],
         counter: u64,
     ) -> Result<Vec<u8>, SFrameError> {
-        let key = self.keys.get(&key_id).ok_or(SFrameError::KeyNotFound(key_id))?;
+        let key = self
+            .keys
+            .get(&key_id)
+            .ok_or(SFrameError::KeyNotFound(key_id))?;
         let header = SFrameHeader::new(key_id, counter);
         key.encrypt(&header, raw_frame_payload)
     }
@@ -613,10 +627,7 @@ impl SFrameEngine {
             .ok_or(SFrameError::KeyNotFound(header.key_id))?;
 
         // Replay check before decryption
-        let filter = self
-            .replay_filters
-            .entry(header.key_id)
-            .or_default();
+        let filter = self.replay_filters.entry(header.key_id).or_default();
         filter.check(header.counter)?;
 
         let header_bytes = &encrypted_payload[..header_len];
@@ -643,12 +654,12 @@ impl SFrameEngine {
                 key_id, header.key_id
             )));
         }
-        let key = self.keys.get(&key_id).ok_or(SFrameError::KeyNotFound(key_id))?;
+        let key = self
+            .keys
+            .get(&key_id)
+            .ok_or(SFrameError::KeyNotFound(key_id))?;
 
-        let filter = self
-            .replay_filters
-            .entry(key_id)
-            .or_default();
+        let filter = self.replay_filters.entry(key_id).or_default();
         filter.check(header.counter)?;
 
         let header_bytes = &encrypted_payload[..header_len];
@@ -662,7 +673,10 @@ impl SFrameEngine {
     }
 
     /// Decrypts an incoming frame without modifying the replay filter state (read-only inspection).
-    pub fn decrypt_frame_stateless(&self, encrypted_payload: &[u8]) -> Result<(SFrameHeader, Vec<u8>), SFrameError> {
+    pub fn decrypt_frame_stateless(
+        &self,
+        encrypted_payload: &[u8],
+    ) -> Result<(SFrameHeader, Vec<u8>), SFrameError> {
         let (header, header_len) = SFrameHeader::parse(encrypted_payload)?;
         let key = self
             .keys
@@ -689,10 +703,7 @@ pub fn encrypt_frame(
 }
 
 /// Standalone helper to decrypt an encrypted payload given an `SFrameKey`.
-pub fn decrypt_frame(
-    key: &SFrameKey,
-    encrypted_payload: &[u8],
-) -> Result<Vec<u8>, SFrameError> {
+pub fn decrypt_frame(key: &SFrameKey, encrypted_payload: &[u8]) -> Result<Vec<u8>, SFrameError> {
     let (header, header_len) = SFrameHeader::parse(encrypted_payload)?;
     let header_bytes = &encrypted_payload[..header_len];
     let ciphertext_and_tag = &encrypted_payload[header_len..];
@@ -722,7 +733,8 @@ mod tests {
                 let serialized = header.serialize();
                 assert_eq!(serialized.len(), header.serialized_size());
 
-                let (parsed, consumed) = SFrameHeader::parse(&serialized).expect("Parse short KID header");
+                let (parsed, consumed) =
+                    SFrameHeader::parse(&serialized).expect("Parse short KID header");
                 assert_eq!(parsed, header);
                 assert_eq!(consumed, serialized.len());
             }
@@ -738,7 +750,8 @@ mod tests {
                 let serialized = header.serialize();
                 assert_eq!(serialized.len(), header.serialized_size());
 
-                let (parsed, consumed) = SFrameHeader::parse(&serialized).expect("Parse extended KID header");
+                let (parsed, consumed) =
+                    SFrameHeader::parse(&serialized).expect("Parse extended KID header");
                 assert_eq!(parsed, header);
                 assert_eq!(consumed, serialized.len());
             }
@@ -764,7 +777,9 @@ mod tests {
         let rx_key = SFrameKey::new(CipherSuite::Aes128Gcm, &raw_key, base_iv).unwrap();
         rx_engine.set_key(1, rx_key);
 
-        let decrypted = rx_engine.decrypt_frame(&encrypted).expect("Decryption failed");
+        let decrypted = rx_engine
+            .decrypt_frame(&encrypted)
+            .expect("Decryption failed");
         assert_eq!(decrypted, plaintext);
     }
 
@@ -785,7 +800,9 @@ mod tests {
         let rx_key = SFrameKey::new(CipherSuite::Aes256Gcm, &raw_key, base_iv).unwrap();
         rx_engine.set_key(5, rx_key);
 
-        let decrypted = rx_engine.decrypt_frame(&encrypted).expect("Decryption failed");
+        let decrypted = rx_engine
+            .decrypt_frame(&encrypted)
+            .expect("Decryption failed");
         assert_eq!(decrypted, plaintext);
     }
 
@@ -856,42 +873,65 @@ mod tests {
 
         // Replay of p1 should fail
         let replay_res = rx_engine.decrypt_frame(&p1);
-        assert!(matches!(replay_res, Err(SFrameError::ReplayDetected { .. })));
+        assert!(matches!(
+            replay_res,
+            Err(SFrameError::ReplayDetected { .. })
+        ));
 
         // p3 succeeds
         assert_eq!(rx_engine.decrypt_frame(&p3).unwrap(), b"Frame 2");
 
         // Replay of p2 or p3 fails
-        assert!(matches!(rx_engine.decrypt_frame(&p2), Err(SFrameError::ReplayDetected { .. })));
-        assert!(matches!(rx_engine.decrypt_frame(&p3), Err(SFrameError::ReplayDetected { .. })));
+        assert!(matches!(
+            rx_engine.decrypt_frame(&p2),
+            Err(SFrameError::ReplayDetected { .. })
+        ));
+        assert!(matches!(
+            rx_engine.decrypt_frame(&p3),
+            Err(SFrameError::ReplayDetected { .. })
+        ));
     }
 
     #[test]
     fn test_key_ratcheting_and_epoch_rotation() {
-        let mut tx_engine = SFrameEngine::from_shared_secret(CipherSuite::Aes128Gcm, b"room_passphrase_secret_123").unwrap();
-        let mut rx_engine = SFrameEngine::from_shared_secret(CipherSuite::Aes128Gcm, b"room_passphrase_secret_123").unwrap();
+        let mut tx_engine =
+            SFrameEngine::from_shared_secret(CipherSuite::Aes128Gcm, b"room_passphrase_secret_123")
+                .unwrap();
+        let mut rx_engine =
+            SFrameEngine::from_shared_secret(CipherSuite::Aes128Gcm, b"room_passphrase_secret_123")
+                .unwrap();
 
         let frame_epoch0 = tx_engine.encrypt_frame(b"Message in Epoch 0").unwrap();
-        assert_eq!(rx_engine.decrypt_frame(&frame_epoch0).unwrap(), b"Message in Epoch 0");
+        assert_eq!(
+            rx_engine.decrypt_frame(&frame_epoch0).unwrap(),
+            b"Message in Epoch 0"
+        );
 
         // Rotate to Epoch 1
         tx_engine.rotate_epoch(1).unwrap();
         rx_engine.rotate_epoch(1).unwrap();
 
         let frame_epoch1 = tx_engine.encrypt_frame(b"Message in Epoch 1").unwrap();
-        assert_eq!(rx_engine.decrypt_frame(&frame_epoch1).unwrap(), b"Message in Epoch 1");
+        assert_eq!(
+            rx_engine.decrypt_frame(&frame_epoch1).unwrap(),
+            b"Message in Epoch 1"
+        );
 
         // Rotate to Epoch 2
         tx_engine.rotate_epoch(2).unwrap();
         rx_engine.rotate_epoch(2).unwrap();
 
         let frame_epoch2 = tx_engine.encrypt_frame(b"Message in Epoch 2").unwrap();
-        assert_eq!(rx_engine.decrypt_frame(&frame_epoch2).unwrap(), b"Message in Epoch 2");
+        assert_eq!(
+            rx_engine.decrypt_frame(&frame_epoch2).unwrap(),
+            b"Message in Epoch 2"
+        );
     }
 
     #[test]
     fn test_unknown_key_id_rejected() {
-        let mut tx_engine = SFrameEngine::from_shared_secret(CipherSuite::Aes128Gcm, b"secret_A").unwrap();
+        let mut tx_engine =
+            SFrameEngine::from_shared_secret(CipherSuite::Aes128Gcm, b"secret_A").unwrap();
         tx_engine.set_active_key_id(99); // No key for 99
 
         let err = tx_engine.encrypt_frame(b"Test").unwrap_err();

@@ -1,7 +1,6 @@
-use egui::{Color32, Pos2, Rect, RichText, Stroke, Ui};
 use crate::app::ConferApp;
 use crate::sdk::protocol::CaptionChunkDto;
-
+use egui::{Color32, Pos2, Rect, RichText, Stroke, Ui};
 
 /// Auto-fade duration in seconds for live caption bubbles
 pub const CAPTION_FADE_DURATION_SECS: f32 = 6.0;
@@ -25,7 +24,9 @@ pub fn get_speaker_initials(name: &str) -> String {
 
 /// Helper function to compute deterministic color from speaker name
 pub fn get_speaker_color(name: &str) -> Color32 {
-    let hash: u32 = name.bytes().fold(0u32, |acc, b| acc.wrapping_add(b as u32).wrapping_mul(31));
+    let hash: u32 = name
+        .bytes()
+        .fold(0u32, |acc, b| acc.wrapping_add(b as u32).wrapping_mul(31));
     match hash % 6 {
         0 => Color32::from_rgb(56, 189, 248),  // Sky Blue
         1 => Color32::from_rgb(52, 211, 153),  // Emerald
@@ -85,7 +86,10 @@ pub fn render_captions(app: &mut ConferApp, ui: &mut Ui, stage_rect: Rect) {
 
         egui::Frame::group(ui.style())
             .fill(Color32::from_rgba_premultiplied(15, 17, 21, 235))
-            .stroke(Stroke::new(1.0_f32, Color32::from_rgba_premultiplied(255, 255, 255, 25)))
+            .stroke(Stroke::new(
+                1.0_f32,
+                Color32::from_rgba_premultiplied(255, 255, 255, 25),
+            ))
             .rounding(14.0)
             .inner_margin(egui::Margin::symmetric(16.0, 10.0))
             .show(ui, |ui| {
@@ -130,21 +134,42 @@ fn render_caption_chunk(ui: &mut Ui, cap: &CaptionChunkDto, now_ms: u64) {
 
         egui::Frame::group(ui.style())
             .fill(pill_bg)
-            .stroke(Stroke::new(1.0_f32, Color32::from_rgba_premultiplied(speaker_color.r(), speaker_color.g(), speaker_color.b(), (180.0 * alpha_factor) as u8)))
+            .stroke(Stroke::new(
+                1.0_f32,
+                Color32::from_rgba_premultiplied(
+                    speaker_color.r(),
+                    speaker_color.g(),
+                    speaker_color.b(),
+                    (180.0 * alpha_factor) as u8,
+                ),
+            ))
             .rounding(10.0)
-
             .inner_margin(egui::Margin::symmetric(6.0, 2.0))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(initials).size(10.0).strong().color(speaker_color));
-                    ui.label(RichText::new(&cap.speaker_name).size(11.0).strong().color(Color32::WHITE));
+                    ui.label(
+                        RichText::new(initials)
+                            .size(10.0)
+                            .strong()
+                            .color(speaker_color),
+                    );
+                    ui.label(
+                        RichText::new(&cap.speaker_name)
+                            .size(11.0)
+                            .strong()
+                            .color(Color32::WHITE),
+                    );
                 });
             });
 
         // Language tag if not en-US
         if !cap.language.is_empty() && cap.language != "en-US" && cap.language != "en" {
             let lang_tag = cap.language.to_uppercase();
-            ui.label(RichText::new(format!("[{lang_tag}]")).size(10.0).color(Color32::from_rgb(148, 163, 184)));
+            ui.label(
+                RichText::new(format!("[{lang_tag}]"))
+                    .size(10.0)
+                    .color(Color32::from_rgb(148, 163, 184)),
+            );
         }
 
         // Subtitle Text
@@ -168,7 +193,12 @@ fn render_caption_chunk(ui: &mut Ui, cap: &CaptionChunkDto, now_ms: u64) {
             ui.label(RichText::new(&cap.text).size(13.5).color(text_color));
         } else {
             // Typing / interim indicator
-            ui.label(RichText::new(format!("{} ⚡", cap.text)).size(13.5).italics().color(text_color));
+            ui.label(
+                RichText::new(format!("{} ⚡", cap.text))
+                    .size(13.5)
+                    .italics()
+                    .color(text_color),
+            );
         }
     });
 }
@@ -242,7 +272,11 @@ mod tests {
             language: "en-US".to_string(),
             timestamp_ms: 1500,
         };
-        if let Some(existing) = captions.iter_mut().rev().find(|c| c.participant_id == chunk2.participant_id && !c.is_final) {
+        if let Some(existing) = captions
+            .iter_mut()
+            .rev()
+            .find(|c| c.participant_id == chunk2.participant_id && !c.is_final)
+        {
             existing.text = chunk2.text;
             existing.is_final = chunk2.is_final;
         } else {
@@ -260,7 +294,11 @@ mod tests {
             language: "en-US".to_string(),
             timestamp_ms: 2000,
         };
-        if let Some(existing) = captions.iter_mut().rev().find(|c| c.participant_id == chunk3.participant_id && !c.is_final) {
+        if let Some(existing) = captions
+            .iter_mut()
+            .rev()
+            .find(|c| c.participant_id == chunk3.participant_id && !c.is_final)
+        {
             existing.text = chunk3.text;
             existing.is_final = chunk3.is_final;
         } else {
@@ -279,7 +317,11 @@ mod tests {
             language: "en-US".to_string(),
             timestamp_ms: 2500,
         };
-        if let Some(existing) = captions.iter_mut().rev().find(|c| c.participant_id == chunk4.participant_id && !c.is_final) {
+        if let Some(existing) = captions
+            .iter_mut()
+            .rev()
+            .find(|c| c.participant_id == chunk4.participant_id && !c.is_final)
+        {
             existing.text = chunk4.text;
             existing.is_final = chunk4.is_final;
         } else {
@@ -325,4 +367,3 @@ mod tests {
         assert_eq!(list[0].speaker_name, "Fresh Speaker");
     }
 }
-

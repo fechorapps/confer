@@ -1,6 +1,6 @@
+use egui::ColorImage;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
-use egui::ColorImage;
 
 use crate::media::capture::error::CaptureError;
 
@@ -25,7 +25,8 @@ pub enum PickerMode {
 }
 
 pub trait ScreenCaptureBackend: Send {
-    fn start(&mut self, sink: FrameSink, display: Option<&DisplayInfo>) -> Result<(), CaptureError>;
+    fn start(&mut self, sink: FrameSink, display: Option<&DisplayInfo>)
+        -> Result<(), CaptureError>;
     fn stop(&mut self);
     fn is_running(&self) -> bool;
 
@@ -66,12 +67,28 @@ pub fn detect_displays() -> Vec<DisplayInfo> {
 
                 if let Some((dims, offsets)) = geom_part.split_once('+') {
                     let (w_str, h_str) = dims.split_once('x').unwrap_or(("1920", "1080"));
-                    let w: u32 = w_str.split('/').next().unwrap_or("1920").parse().unwrap_or(1920);
-                    let h: u32 = h_str.split('/').next().unwrap_or("1080").parse().unwrap_or(1080);
+                    let w: u32 = w_str
+                        .split('/')
+                        .next()
+                        .unwrap_or("1920")
+                        .parse()
+                        .unwrap_or(1920);
+                    let h: u32 = h_str
+                        .split('/')
+                        .next()
+                        .unwrap_or("1080")
+                        .parse()
+                        .unwrap_or(1080);
 
                     let offset_parts: Vec<&str> = offsets.split('+').collect();
-                    let x: i32 = offset_parts.first().and_then(|s| s.parse().ok()).unwrap_or(0);
-                    let y: i32 = offset_parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+                    let x: i32 = offset_parts
+                        .first()
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(0);
+                    let y: i32 = offset_parts
+                        .get(1)
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(0);
 
                     let id = displays.len();
                     let primary_tag = if is_primary { " ★ Primary" } else { "" };
@@ -108,8 +125,16 @@ pub fn detect_displays() -> Vec<DisplayInfo> {
 
     // Add full multi-screen desktop option if multiple monitors exist
     if displays.len() > 1 {
-        let max_w = displays.iter().map(|d| d.x + d.width as i32).max().unwrap_or(1920) as u32;
-        let max_h = displays.iter().map(|d| d.y + d.height as i32).max().unwrap_or(1080) as u32;
+        let max_w = displays
+            .iter()
+            .map(|d| d.x + d.width as i32)
+            .max()
+            .unwrap_or(1920) as u32;
+        let max_h = displays
+            .iter()
+            .map(|d| d.y + d.height as i32)
+            .max()
+            .unwrap_or(1080) as u32;
         let id = displays.len();
         displays.push(DisplayInfo {
             id,
@@ -139,13 +164,17 @@ impl ScreenCapturer {
         #[cfg(target_os = "linux")]
         let (picker_mode, backend): (PickerMode, Box<dyn ScreenCaptureBackend>) = {
             if probe_portal_available() {
-                tracing::info!("ScreenCapturer: Using Linux Wayland/Portal backend (Native Picker)");
+                tracing::info!(
+                    "ScreenCapturer: Using Linux Wayland/Portal backend (Native Picker)"
+                );
                 (
                     PickerMode::Native,
                     Box::new(linux_portal::PortalBackend::new()),
                 )
             } else {
-                tracing::info!("ScreenCapturer: Using Linux X11 MIT-SHM fallback backend (DisplayList)");
+                tracing::info!(
+                    "ScreenCapturer: Using Linux X11 MIT-SHM fallback backend (DisplayList)"
+                );
                 (
                     PickerMode::DisplayList,
                     Box::new(linux_xshm::XshmBackend::new()),
@@ -162,20 +191,12 @@ impl ScreenCapturer {
         };
 
         #[cfg(target_os = "macos")]
-        let (picker_mode, backend): (PickerMode, Box<dyn ScreenCaptureBackend>) = {
-            (
-                PickerMode::Native,
-                Box::new(macos::MacOsBackend::new()),
-            )
-        };
+        let (picker_mode, backend): (PickerMode, Box<dyn ScreenCaptureBackend>) =
+            { (PickerMode::Native, Box::new(macos::MacOsBackend::new())) };
 
         #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
-        let (picker_mode, backend): (PickerMode, Box<dyn ScreenCaptureBackend>) = {
-            (
-                PickerMode::DisplayList,
-                Box::new(NullBackend::new()),
-            )
-        };
+        let (picker_mode, backend): (PickerMode, Box<dyn ScreenCaptureBackend>) =
+            { (PickerMode::DisplayList, Box::new(NullBackend::new())) };
 
         Self {
             latest_frame,
@@ -249,7 +270,11 @@ impl NullBackend {
 
 #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
 impl ScreenCaptureBackend for NullBackend {
-    fn start(&mut self, _sink: FrameSink, _display: Option<&DisplayInfo>) -> Result<(), CaptureError> {
+    fn start(
+        &mut self,
+        _sink: FrameSink,
+        _display: Option<&DisplayInfo>,
+    ) -> Result<(), CaptureError> {
         Err(CaptureError::UnsupportedPlatform(format!(
             "Screen capture is not supported on {}",
             std::env::consts::OS

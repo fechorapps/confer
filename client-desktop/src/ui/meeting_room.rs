@@ -31,9 +31,23 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                             ui.label(RichText::new("⚡").size(12.0).color(Color32::WHITE));
                         });
                     ui.add_space(4.0);
-                    ui.label(RichText::new("CONFER").size(15.0).strong().color(Color32::from_rgb(248, 250, 252)));
-                    ui.label(RichText::new("•").size(10.0).color(Color32::from_rgb(100, 116, 139)));
-                    ui.label(RichText::new(&app.room_title).size(13.5).strong().color(Color32::from_rgb(226, 232, 240)));
+                    ui.label(
+                        RichText::new("CONFER")
+                            .size(15.0)
+                            .strong()
+                            .color(Color32::from_rgb(248, 250, 252)),
+                    );
+                    ui.label(
+                        RichText::new("•")
+                            .size(10.0)
+                            .color(Color32::from_rgb(100, 116, 139)),
+                    );
+                    ui.label(
+                        RichText::new(&app.room_title)
+                            .size(13.5)
+                            .strong()
+                            .color(Color32::from_rgb(226, 232, 240)),
+                    );
                 });
 
                 // Join Code Pill (Click to copy)
@@ -41,13 +55,19 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                     ui.add_space(8.0);
                     let code_btn = ui.add(
                         egui::Button::new(
-                            RichText::new(format!("CODE: {code}")).size(11.0).strong().color(Color32::from_rgb(56, 189, 248))
+                            RichText::new(format!("CODE: {code}"))
+                                .size(11.0)
+                                .strong()
+                                .color(Color32::from_rgb(56, 189, 248)),
                         )
                         .fill(Color32::from_rgb(26, 29, 33))
                         .stroke(Stroke::new(1.0_f32, Color32::from_rgb(38, 42, 48)))
-                        .rounding(6.0)
+                        .rounding(6.0),
                     );
-                    if code_btn.on_hover_text("Click to copy room code to clipboard").clicked() {
+                    if code_btn
+                        .on_hover_text("Click to copy room code to clipboard")
+                        .clicked()
+                    {
                         ui.output_mut(|o| o.copied_text = code.clone());
                     }
                 }
@@ -61,21 +81,58 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                         .rounding(6.0)
                         .inner_margin(egui::Margin::symmetric(8.0, 3.0))
                         .show(ui, |ui| {
-                            ui.label(RichText::new("🔒 LOCKED").size(10.5).strong().color(Color32::from_rgb(251, 191, 36)));
+                            ui.label(
+                                RichText::new("🔒 LOCKED")
+                                    .size(10.5)
+                                    .strong()
+                                    .color(Color32::from_rgb(251, 191, 36)),
+                            );
                         });
                 }
 
                 // Right Action Panels Hub
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     // Diagnostics HUD Toggle
-                    let diag_bg = if app.show_diagnostics { Color32::from_rgb(2, 132, 199) } else { Color32::from_rgb(26, 29, 33) };
-                    if ui.add(egui::Button::new(RichText::new("⚙ HUD").size(11.5).strong().color(Color32::WHITE)).fill(diag_bg).rounding(6.0)).clicked() {
+                    let diag_bg = if app.show_diagnostics {
+                        Color32::from_rgb(2, 132, 199)
+                    } else {
+                        Color32::from_rgb(26, 29, 33)
+                    };
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                RichText::new("⚙ HUD")
+                                    .size(11.5)
+                                    .strong()
+                                    .color(Color32::WHITE),
+                            )
+                            .fill(diag_bg)
+                            .rounding(6.0),
+                        )
+                        .clicked()
+                    {
                         app.show_diagnostics = !app.show_diagnostics;
                     }
 
                     // Polls Panel Toggle
-                    let polls_bg = if app.show_polls { Color32::from_rgb(2, 132, 199) } else { Color32::from_rgb(26, 29, 33) };
-                    if ui.add(egui::Button::new(RichText::new("📊 Polls").size(11.5).strong().color(Color32::WHITE)).fill(polls_bg).rounding(6.0)).clicked() {
+                    let polls_bg = if app.show_polls {
+                        Color32::from_rgb(2, 132, 199)
+                    } else {
+                        Color32::from_rgb(26, 29, 33)
+                    };
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                RichText::new("📊 Polls")
+                                    .size(11.5)
+                                    .strong()
+                                    .color(Color32::WHITE),
+                            )
+                            .fill(polls_bg)
+                            .rounding(6.0),
+                        )
+                        .clicked()
+                    {
                         app.show_polls = !app.show_polls;
                         if app.show_polls {
                             app.show_chat = false;
@@ -89,8 +146,24 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                     } else {
                         "💬 Chat".to_string()
                     };
-                    let chat_bg = if app.show_chat { Color32::from_rgb(2, 132, 199) } else { Color32::from_rgb(26, 29, 33) };
-                    if ui.add(egui::Button::new(RichText::new(chat_btn_text).size(11.5).strong().color(Color32::WHITE)).fill(chat_bg).rounding(6.0)).clicked() {
+                    let chat_bg = if app.show_chat {
+                        Color32::from_rgb(2, 132, 199)
+                    } else {
+                        Color32::from_rgb(26, 29, 33)
+                    };
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                RichText::new(chat_btn_text)
+                                    .size(11.5)
+                                    .strong()
+                                    .color(Color32::WHITE),
+                            )
+                            .fill(chat_bg)
+                            .rounding(6.0),
+                        )
+                        .clicked()
+                    {
                         app.show_chat = !app.show_chat;
                         if app.show_chat {
                             app.show_roster = false;
@@ -100,9 +173,25 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                     }
 
                     // People / Participants Roster Toggle
-                    let roster_bg = if app.show_roster { Color32::from_rgb(2, 132, 199) } else { Color32::from_rgb(26, 29, 33) };
+                    let roster_bg = if app.show_roster {
+                        Color32::from_rgb(2, 132, 199)
+                    } else {
+                        Color32::from_rgb(26, 29, 33)
+                    };
                     let roster_text = format!("👥 People ({})", app.roster.len() + 1);
-                    if ui.add(egui::Button::new(RichText::new(roster_text).size(11.5).strong().color(Color32::WHITE)).fill(roster_bg).rounding(6.0)).clicked() {
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                RichText::new(roster_text)
+                                    .size(11.5)
+                                    .strong()
+                                    .color(Color32::WHITE),
+                            )
+                            .fill(roster_bg)
+                            .rounding(6.0),
+                        )
+                        .clicked()
+                    {
                         app.show_roster = !app.show_roster;
                         if app.show_roster {
                             app.show_chat = false;
@@ -215,30 +304,58 @@ fn render_safety_modals(app: &mut ConferApp, ui: &mut Ui, full_rect: Rect) {
                 .inner_margin(24.0)
                 .show(ui, |ui| {
                     ui.vertical_centered(|ui| {
-                        ui.label(RichText::new("⚠️ Leave Meeting?").size(17.0).strong().color(Color32::WHITE));
+                        ui.label(
+                            RichText::new("⚠️ Leave Meeting?")
+                                .size(17.0)
+                                .strong()
+                                .color(Color32::WHITE),
+                        );
                         ui.add_space(8.0);
-                        ui.label(RichText::new("Are you sure you want to disconnect from this conference room?").size(12.5).color(Color32::from_rgb(148, 163, 184)));
+                        ui.label(
+                            RichText::new(
+                                "Are you sure you want to disconnect from this conference room?",
+                            )
+                            .size(12.5)
+                            .color(Color32::from_rgb(148, 163, 184)),
+                        );
                         ui.add_space(20.0);
 
                         ui.horizontal(|ui| {
                             ui.add_space(32.0);
-                            if ui.add_sized(
-                                Vec2::new(140.0, 36.0),
-                                egui::Button::new(RichText::new("Cancel (Esc)").size(12.5).color(Color32::WHITE))
+                            if ui
+                                .add_sized(
+                                    Vec2::new(140.0, 36.0),
+                                    egui::Button::new(
+                                        RichText::new("Cancel (Esc)")
+                                            .size(12.5)
+                                            .color(Color32::WHITE),
+                                    )
                                     .fill(Color32::from_rgb(38, 42, 48))
                                     .rounding(8.0),
-                            ).clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                                )
+                                .clicked()
+                                || ui.input(|i| i.key_pressed(egui::Key::Escape))
+                            {
                                 app.show_leave_confirmation = false;
                             }
 
                             ui.add_space(16.0);
 
-                            if ui.add_sized(
-                                Vec2::new(140.0, 36.0),
-                                egui::Button::new(RichText::new("Leave Call (Enter)").size(12.5).strong().color(Color32::WHITE))
+                            if ui
+                                .add_sized(
+                                    Vec2::new(140.0, 36.0),
+                                    egui::Button::new(
+                                        RichText::new("Leave Call (Enter)")
+                                            .size(12.5)
+                                            .strong()
+                                            .color(Color32::WHITE),
+                                    )
                                     .fill(Color32::from_rgb(225, 29, 72))
                                     .rounding(8.0),
-                            ).clicked() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                                )
+                                .clicked()
+                                || ui.input(|i| i.key_pressed(egui::Key::Enter))
+                            {
                                 app.show_leave_confirmation = false;
                                 app.leave_meeting();
                             }
@@ -269,30 +386,58 @@ fn render_safety_modals(app: &mut ConferApp, ui: &mut Ui, full_rect: Rect) {
                 .inner_margin(24.0)
                 .show(ui, |ui| {
                     ui.vertical_centered(|ui| {
-                        ui.label(RichText::new("Remove Participant?").size(17.0).strong().color(Color32::WHITE));
+                        ui.label(
+                            RichText::new("Remove Participant?")
+                                .size(17.0)
+                                .strong()
+                                .color(Color32::WHITE),
+                        );
                         ui.add_space(8.0);
-                        ui.label(RichText::new(format!("Are you sure you want to remove '{target_name}' from this call?")).size(12.5).color(Color32::from_rgb(148, 163, 184)));
+                        ui.label(
+                            RichText::new(format!(
+                                "Are you sure you want to remove '{target_name}' from this call?"
+                            ))
+                            .size(12.5)
+                            .color(Color32::from_rgb(148, 163, 184)),
+                        );
                         ui.add_space(20.0);
 
                         ui.horizontal(|ui| {
                             ui.add_space(36.0);
-                            if ui.add_sized(
-                                Vec2::new(140.0, 36.0),
-                                egui::Button::new(RichText::new("Cancel (Esc)").size(12.5).color(Color32::WHITE))
+                            if ui
+                                .add_sized(
+                                    Vec2::new(140.0, 36.0),
+                                    egui::Button::new(
+                                        RichText::new("Cancel (Esc)")
+                                            .size(12.5)
+                                            .color(Color32::WHITE),
+                                    )
                                     .fill(Color32::from_rgb(38, 42, 48))
                                     .rounding(8.0),
-                            ).clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                                )
+                                .clicked()
+                                || ui.input(|i| i.key_pressed(egui::Key::Escape))
+                            {
                                 app.kick_confirmation_target = None;
                             }
 
                             ui.add_space(16.0);
 
-                            if ui.add_sized(
-                                Vec2::new(140.0, 36.0),
-                                egui::Button::new(RichText::new("Remove (Enter)").size(12.5).strong().color(Color32::WHITE))
+                            if ui
+                                .add_sized(
+                                    Vec2::new(140.0, 36.0),
+                                    egui::Button::new(
+                                        RichText::new("Remove (Enter)")
+                                            .size(12.5)
+                                            .strong()
+                                            .color(Color32::WHITE),
+                                    )
                                     .fill(Color32::from_rgb(225, 29, 72))
                                     .rounding(8.0),
-                            ).clicked() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                                )
+                                .clicked()
+                                || ui.input(|i| i.key_pressed(egui::Key::Enter))
+                            {
                                 app.host_kick_participant(target_id);
                                 app.kick_confirmation_target = None;
                             }
@@ -305,7 +450,8 @@ fn render_safety_modals(app: &mut ConferApp, ui: &mut Ui, full_rect: Rect) {
 
 fn render_reactions(app: &mut ConferApp, ui: &mut Ui, full_rect: Rect) {
     let now = std::time::Instant::now();
-    app.active_reactions.retain(|r| now.duration_since(r.created_at).as_secs_f32() < 3.0);
+    app.active_reactions
+        .retain(|r| now.duration_since(r.created_at).as_secs_f32() < 3.0);
 
     for r in &app.active_reactions {
         let elapsed = now.duration_since(r.created_at).as_secs_f32();
@@ -352,7 +498,9 @@ fn render_screen_share_stage(app: &mut ConferApp, ui: &mut Ui) {
                     ui.horizontal(|ui| {
                         let disp_label = if let Some(d) = &app.selected_display {
                             d.label.as_str()
-                        } else if app.screen_capturer.picker_mode() == crate::media::PickerMode::Native {
+                        } else if app.screen_capturer.picker_mode()
+                            == crate::media::PickerMode::Native
+                        {
                             "Native Desktop Stream"
                         } else {
                             "Display Screen"
@@ -366,23 +514,37 @@ fn render_screen_share_stage(app: &mut ConferApp, ui: &mut Ui) {
                         );
 
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.add(
-                                egui::Button::new(RichText::new("⏹ Stop Share").size(11.5).strong().color(Color32::WHITE))
+                            if ui
+                                .add(
+                                    egui::Button::new(
+                                        RichText::new("⏹ Stop Share")
+                                            .size(11.5)
+                                            .strong()
+                                            .color(Color32::WHITE),
+                                    )
                                     .fill(Color32::from_rgb(225, 29, 72))
                                     .rounding(6.0),
-                            ).clicked() {
+                                )
+                                .clicked()
+                            {
                                 app.stop_screen_share();
                             }
 
-                            if app.screen_capturer.picker_mode() == crate::media::PickerMode::Native {
-                                if ui.add(
-                                    egui::Button::new(RichText::new("🔄 Switch Source").size(11.5).color(Color32::WHITE))
+                            if app.screen_capturer.picker_mode() == crate::media::PickerMode::Native
+                                && ui
+                                    .add(
+                                        egui::Button::new(
+                                            RichText::new("🔄 Switch Source")
+                                                .size(11.5)
+                                                .color(Color32::WHITE),
+                                        )
                                         .fill(Color32::from_rgb(26, 29, 33))
                                         .rounding(6.0),
-                                ).clicked() {
-                                    app.stop_screen_share();
-                                    app.start_native_screen_share();
-                                }
+                                    )
+                                    .clicked()
+                            {
+                                app.stop_screen_share();
+                                app.start_native_screen_share();
                             }
                         });
                     });
@@ -421,7 +583,11 @@ fn render_screen_share_stage(app: &mut ConferApp, ui: &mut Ui) {
                         let fit_h = fit_h.max(10.0);
 
                         ui.centered_and_justified(|ui| {
-                            ui.add(egui::Image::new(tex).fit_to_exact_size(Vec2::new(fit_w, fit_h)).rounding(8.0));
+                            ui.add(
+                                egui::Image::new(tex)
+                                    .fit_to_exact_size(Vec2::new(fit_w, fit_h))
+                                    .rounding(8.0),
+                            );
                         });
                     } else {
                         ui.vertical_centered(|ui| {
@@ -652,7 +818,11 @@ fn render_single_tile(ui: &mut Ui, props: &TileProps<'_>) {
                 let img_w = (props.width - 2.0).max(40.0);
                 let img_h = (props.height - 2.0).max(40.0);
                 ui.centered_and_justified(|ui| {
-                    ui.add(egui::Image::new(tex).fit_to_exact_size(Vec2::new(img_w, img_h)).rounding(14.0));
+                    ui.add(
+                        egui::Image::new(tex)
+                            .fit_to_exact_size(Vec2::new(img_w, img_h))
+                            .rounding(14.0),
+                    );
                 });
             } else {
                 ui.vertical_centered(|ui| {
@@ -685,7 +855,12 @@ fn render_single_tile(ui: &mut Ui, props: &TileProps<'_>) {
                                 .rounding(12.0)
                                 .inner_margin(egui::Margin::symmetric(8.0, 3.0))
                                 .show(ui, |ui| {
-                                    ui.label(RichText::new("✋ Hand Raised").size(10.5).strong().color(Color32::BLACK));
+                                    ui.label(
+                                        RichText::new("✋ Hand Raised")
+                                            .size(10.5)
+                                            .strong()
+                                            .color(Color32::BLACK),
+                                    );
                                 });
                         });
                     });

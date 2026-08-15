@@ -1,8 +1,8 @@
+use futures_util::{SinkExt, StreamExt};
+use reqwest::Client as HttpClient;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use futures_util::{SinkExt, StreamExt};
-use reqwest::Client as HttpClient;
 use tokio::sync::mpsc;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -53,6 +53,15 @@ pub struct MeetingInfoResponse {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct IceServerConfig {
+    pub urls: Vec<String>,
+    #[serde(default)]
+    pub username: Option<String>,
+    #[serde(default)]
+    pub credential: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct JoinMeetingResponse {
     #[serde(rename = "meetingId")]
     pub meeting_id: Uuid,
@@ -66,6 +75,8 @@ pub struct JoinMeetingResponse {
     pub ws_url: String,
     #[serde(rename = "roomToken")]
     pub room_token: String,
+    #[serde(rename = "iceServers", default)]
+    pub ice_servers: Vec<IceServerConfig>,
 }
 
 pub struct ConferClient {
@@ -91,9 +102,14 @@ impl ConferClient {
         }
     }
 
-    pub async fn dev_login(&self, email: &str, display_name: &str) -> Result<DevLoginResponse, SdkError> {
+    pub async fn dev_login(
+        &self,
+        email: &str,
+        display_name: &str,
+    ) -> Result<DevLoginResponse, SdkError> {
         let url = format!("{}/api/auth/dev-login", self.server_url);
-        let resp = self.http_client
+        let resp = self
+            .http_client
             .post(&url)
             .json(&serde_json::json!({
                 "email": email,
@@ -113,9 +129,15 @@ impl ConferClient {
         Ok(body)
     }
 
-    pub async fn create_meeting(&self, title: &str, owner_id: Uuid, max_participants: i32) -> Result<CreateMeetingResponse, SdkError> {
+    pub async fn create_meeting(
+        &self,
+        title: &str,
+        owner_id: Uuid,
+        max_participants: i32,
+    ) -> Result<CreateMeetingResponse, SdkError> {
         let url = format!("{}/api/meetings", self.server_url);
-        let resp = self.http_client
+        let resp = self
+            .http_client
             .post(&url)
             .json(&serde_json::json!({
                 "title": title,
@@ -138,10 +160,7 @@ impl ConferClient {
 
     pub async fn get_meeting_by_code(&self, code: &str) -> Result<MeetingInfoResponse, SdkError> {
         let url = format!("{}/api/meetings/{code}", self.server_url);
-        let resp = self.http_client
-            .get(&url)
-            .send()
-            .await?;
+        let resp = self.http_client.get(&url).send().await?;
 
         if !resp.status().is_success() {
             return Err(SdkError::Server {
@@ -154,9 +173,15 @@ impl ConferClient {
         Ok(body)
     }
 
-    pub async fn join_meeting(&self, meeting_id: Uuid, user_id: Uuid, display_name: &str) -> Result<JoinMeetingResponse, SdkError> {
+    pub async fn join_meeting(
+        &self,
+        meeting_id: Uuid,
+        user_id: Uuid,
+        display_name: &str,
+    ) -> Result<JoinMeetingResponse, SdkError> {
         let url = format!("{}/api/meetings/{meeting_id}/join", self.server_url);
-        let resp = self.http_client
+        let resp = self
+            .http_client
             .post(&url)
             .json(&serde_json::json!({
                 "userId": user_id,
@@ -178,14 +203,20 @@ impl ConferClient {
     }
 
     pub async fn connect_signaling(&mut self, room_token: &str) -> Result<(), SdkError> {
-        let ws_base = self.server_url.replace("http://", "ws://").replace("https://", "wss://");
+        let ws_base = self
+            .server_url
+            .replace("http://", "ws://")
+            .replace("https://", "wss://");
         let ws_url = format!("{ws_base}/v1/signal?token={room_token}");
 
-        let mut req = ws_url.into_client_request()
+        let mut req = ws_url
+            .into_client_request()
             .map_err(|e| SdkError::InvalidRequest(e.to_string()))?;
         req.headers_mut().insert(
             "Sec-WebSocket-Protocol",
-            "confer.v1".parse().map_err(|e| SdkError::InvalidRequest(format!("{e}")))?,
+            "confer.v1"
+                .parse()
+                .map_err(|e| SdkError::InvalidRequest(format!("{e}")))?,
         );
 
         let (ws_stream, _) = connect_async(req).await?;
@@ -287,11 +318,15 @@ impl ConferClient {
         match &self.outgoing_tx {
             Some(tx) => {
                 if let Err(e) = tx.try_send(message) {
-                    tracing::warn!("failed to enqueue signaling message (channel full or closed): {e}");
+                    tracing::warn!(
+                        "failed to enqueue signaling message (channel full or closed): {e}"
+                    );
                 }
             }
             None => {
-                tracing::warn!("send_message called with no active signaling connection; message dropped");
+                tracing::warn!(
+                    "send_message called with no active signaling connection; message dropped"
+                );
             }
         }
     }

@@ -16,7 +16,11 @@ impl Default for WindowsBackend {
 }
 
 impl ScreenCaptureBackend for WindowsBackend {
-    fn start(&mut self, _sink: FrameSink, _display: Option<&DisplayInfo>) -> Result<(), CaptureError> {
+    fn start(
+        &mut self,
+        _sink: FrameSink,
+        _display: Option<&DisplayInfo>,
+    ) -> Result<(), CaptureError> {
         Err(CaptureError::UnsupportedPlatform(
             "Windows DXGI Desktop Duplication capture is planned for phase 2".to_string(),
         ))

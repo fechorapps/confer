@@ -39,7 +39,9 @@ pub fn render_watermark(ui: &mut Ui, rect: Rect, viewer_name: &str, viewer_email
 
         while x < end_x {
             let pos = Pos2::new(x, y);
-            if rect.contains(pos) || rect.intersects(Rect::from_min_size(pos, egui::vec2(step_x, step_y))) {
+            if rect.contains(pos)
+                || rect.intersects(Rect::from_min_size(pos, egui::vec2(step_x, step_y)))
+            {
                 painter.text(
                     pos,
                     egui::Align2::CENTER_CENTER,

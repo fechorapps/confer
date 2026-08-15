@@ -8,7 +8,9 @@ use std::time::Duration;
 
 pub use camera::CameraCapturer;
 pub use error::CaptureError;
-pub use screen::{detect_displays, DisplayInfo, FrameSink, PickerMode, ScreenCaptureBackend, ScreenCapturer};
+pub use screen::{
+    detect_displays, DisplayInfo, FrameSink, PickerMode, ScreenCaptureBackend, ScreenCapturer,
+};
 
 /// Joins a worker thread but gives up after `timeout` instead of blocking the
 /// caller (often the UI thread) indefinitely if the thread is stuck inside a

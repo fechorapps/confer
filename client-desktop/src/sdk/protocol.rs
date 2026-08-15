@@ -18,6 +18,18 @@ pub struct TileSpec {
     pub visible: bool,
 }
 
+/// Maps one m-line of a `subscribe_offer` (in m-line order) to the track it
+/// carries. The server relays a single encoding per track, so `layer` is
+/// always "f" today.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrackMapping {
+    pub track_id: String,
+    pub publisher_id: Uuid,
+    pub kind: String,
+    #[serde(default)]
+    pub layer: String,
+}
+
 fn default_true() -> bool {
     true
 }
@@ -188,7 +200,6 @@ fn default_language() -> String {
     "en-US".to_string()
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientMessage {
@@ -269,6 +280,18 @@ pub enum ClientMessage {
     Ping {
         seq: u64,
     },
+    /// Trickle ICE candidate for one of the two peer connections.
+    /// `target` is "publish" or "subscribe".
+    IceCandidate {
+        target: String,
+        candidate: String,
+        #[serde(default)]
+        sdp_mid: Option<String>,
+        #[serde(default)]
+        sdp_mline_index: Option<u16>,
+        #[serde(default)]
+        username_fragment: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -286,7 +309,17 @@ pub enum ServerMessage {
     },
     SubscribeOffer {
         sdp: String,
-        mapping: Vec<serde_json::Value>,
+        mapping: Vec<TrackMapping>,
+    },
+    IceCandidate {
+        target: String,
+        candidate: String,
+        #[serde(default)]
+        sdp_mid: Option<String>,
+        #[serde(default)]
+        sdp_mline_index: Option<u16>,
+        #[serde(default)]
+        username_fragment: Option<String>,
     },
     ParticipantJoined {
         participant: ParticipantState,
@@ -328,7 +361,6 @@ pub enum ServerMessage {
         timestamp_ms: u64,
     },
     PollCreated {
-
         poll: PollDto,
     },
     PollUpdated {
@@ -391,7 +423,8 @@ mod tests {
         let json = serde_json::to_string(&msg).expect("Failed to serialize Ping message");
         assert_eq!(json, r#"{"type":"ping","seq":42}"#);
 
-        let parsed: ClientMessage = serde_json::from_str(&json).expect("Failed to deserialize Ping message");
+        let parsed: ClientMessage =
+            serde_json::from_str(&json).expect("Failed to deserialize Ping message");
         match parsed {
             ClientMessage::Ping { seq } => assert_eq!(seq, 42),
             _ => panic!("Expected Ping variant"),
@@ -418,9 +451,15 @@ mod tests {
             r#"{{"type":"joined","participant_id":"{part_id}","meeting_id":"{meet_id}","room_title":"Engineering Standup","role":"host","roster":[]}}"#
         );
 
-        let msg: ServerMessage = serde_json::from_str(&raw_json).expect("Failed to deserialize Joined");
+        let msg: ServerMessage =
+            serde_json::from_str(&raw_json).expect("Failed to deserialize Joined");
         match msg {
-            ServerMessage::Joined { participant_id, room_title, role, .. } => {
+            ServerMessage::Joined {
+                participant_id,
+                room_title,
+                role,
+                ..
+            } => {
                 assert_eq!(participant_id, part_id);
                 assert_eq!(room_title, "Engineering Standup");
                 assert_eq!(role, "host");
@@ -432,7 +471,8 @@ mod tests {
     #[test]
     fn test_server_message_pong_deserialization() {
         let raw_json = r#"{"type":"pong","seq":100}"#;
-        let msg: ServerMessage = serde_json::from_str(raw_json).expect("Failed to deserialize Pong");
+        let msg: ServerMessage =
+            serde_json::from_str(raw_json).expect("Failed to deserialize Pong");
         match msg {
             ServerMessage::Pong { seq } => assert_eq!(seq, 100),
             _ => panic!("Expected Pong variant"),
@@ -447,7 +487,11 @@ mod tests {
         let create_msg = ClientMessage::CreatePoll {
             poll_id,
             question: "What feature should we build next?".to_string(),
-            options: vec!["Whiteboard".to_string(), "Polls".to_string(), "Breakout Rooms".to_string()],
+            options: vec![
+                "Whiteboard".to_string(),
+                "Polls".to_string(),
+                "Breakout Rooms".to_string(),
+            ],
             multi_choice: false,
             is_anonymous: true,
         };
@@ -472,8 +516,18 @@ mod tests {
             creator_name: "Alice Host".to_string(),
             question: "Release v1.0 today?".to_string(),
             options: vec![
-                PollOptionDto { id: 0, text: "Yes".to_string(), vote_count: 5, voter_ids: vec![creator_id] },
-                PollOptionDto { id: 1, text: "No".to_string(), vote_count: 1, voter_ids: vec![] },
+                PollOptionDto {
+                    id: 0,
+                    text: "Yes".to_string(),
+                    vote_count: 5,
+                    voter_ids: vec![creator_id],
+                },
+                PollOptionDto {
+                    id: 1,
+                    text: "No".to_string(),
+                    vote_count: 1,
+                    voter_ids: vec![],
+                },
             ],
             multi_choice: false,
             is_anonymous: false,
@@ -482,9 +536,13 @@ mod tests {
             created_at: "2026-08-14T20:00:00Z".to_string(),
         };
 
-        let server_created = ServerMessage::PollCreated { poll: poll_dto.clone() };
-        let srv_json = serde_json::to_string(&server_created).expect("Failed to serialize PollCreated");
-        let parsed_srv: ServerMessage = serde_json::from_str(&srv_json).expect("Failed to deserialize PollCreated");
+        let server_created = ServerMessage::PollCreated {
+            poll: poll_dto.clone(),
+        };
+        let srv_json =
+            serde_json::to_string(&server_created).expect("Failed to serialize PollCreated");
+        let parsed_srv: ServerMessage =
+            serde_json::from_str(&srv_json).expect("Failed to deserialize PollCreated");
         match parsed_srv {
             ServerMessage::PollCreated { poll } => {
                 assert_eq!(poll.id, poll_id);
@@ -496,8 +554,10 @@ mod tests {
         }
 
         let server_closed = ServerMessage::PollClosed { poll_id };
-        let closed_json = serde_json::to_string(&server_closed).expect("Failed to serialize PollClosed");
-        let parsed_closed: ServerMessage = serde_json::from_str(&closed_json).expect("Failed to deserialize PollClosed");
+        let closed_json =
+            serde_json::to_string(&server_closed).expect("Failed to serialize PollClosed");
+        let parsed_closed: ServerMessage =
+            serde_json::from_str(&closed_json).expect("Failed to deserialize PollClosed");
         match parsed_closed {
             ServerMessage::PollClosed { poll_id: id } => assert_eq!(id, poll_id),
             _ => panic!("Expected PollClosed variant"),
@@ -520,18 +580,24 @@ mod tests {
             stroke_width: 3.5,
         };
 
-        let client_stroke = ClientMessage::WhiteboardStroke { stroke: stroke_dto.clone() };
-        let json = serde_json::to_string(&client_stroke).expect("Failed to serialize WhiteboardStroke");
+        let client_stroke = ClientMessage::WhiteboardStroke {
+            stroke: stroke_dto.clone(),
+        };
+        let json =
+            serde_json::to_string(&client_stroke).expect("Failed to serialize WhiteboardStroke");
         assert!(json.contains(r#""type":"whiteboard_stroke""#));
         assert!(json.contains(r#""tool":"rectangle""#));
 
         let client_clear = ClientMessage::WhiteboardClear;
-        let clear_json = serde_json::to_string(&client_clear).expect("Failed to serialize WhiteboardClear");
+        let clear_json =
+            serde_json::to_string(&client_clear).expect("Failed to serialize WhiteboardClear");
         assert_eq!(clear_json, r#"{"type":"whiteboard_clear"}"#);
 
         let server_stroke = ServerMessage::WhiteboardStroke { stroke: stroke_dto };
-        let srv_json = serde_json::to_string(&server_stroke).expect("Failed to serialize Server WhiteboardStroke");
-        let parsed_stroke: ServerMessage = serde_json::from_str(&srv_json).expect("Failed to deserialize Server WhiteboardStroke");
+        let srv_json = serde_json::to_string(&server_stroke)
+            .expect("Failed to serialize Server WhiteboardStroke");
+        let parsed_stroke: ServerMessage =
+            serde_json::from_str(&srv_json).expect("Failed to deserialize Server WhiteboardStroke");
         match parsed_stroke {
             ServerMessage::WhiteboardStroke { stroke } => {
                 assert_eq!(stroke.id, stroke_id);
@@ -549,8 +615,10 @@ mod tests {
         }
 
         let server_clear = ServerMessage::WhiteboardClear;
-        let srv_clear_json = serde_json::to_string(&server_clear).expect("Failed to serialize Server WhiteboardClear");
-        let parsed_clear: ServerMessage = serde_json::from_str(&srv_clear_json).expect("Failed to deserialize Server WhiteboardClear");
+        let srv_clear_json = serde_json::to_string(&server_clear)
+            .expect("Failed to serialize Server WhiteboardClear");
+        let parsed_clear: ServerMessage = serde_json::from_str(&srv_clear_json)
+            .expect("Failed to deserialize Server WhiteboardClear");
         match parsed_clear {
             ServerMessage::WhiteboardClear => {}
             _ => panic!("Expected WhiteboardClear variant"),
@@ -577,12 +645,14 @@ mod tests {
         };
 
         let json = serde_json::to_string(&custom_policy).expect("Failed to serialize policy");
-        let parsed: MeetingPolicyDto = serde_json::from_str(&json).expect("Failed to deserialize policy");
+        let parsed: MeetingPolicyDto =
+            serde_json::from_str(&json).expect("Failed to deserialize policy");
         assert_eq!(parsed, custom_policy);
 
         // Test partial deserialization defaults
         let minimal_json = r#"{}"#;
-        let parsed_defaults: MeetingPolicyDto = serde_json::from_str(minimal_json).expect("Failed to deserialize empty policy");
+        let parsed_defaults: MeetingPolicyDto =
+            serde_json::from_str(minimal_json).expect("Failed to deserialize empty policy");
         assert_eq!(parsed_defaults, default_policy);
     }
 
@@ -590,7 +660,9 @@ mod tests {
     fn test_waiting_room_client_messages_serialization() {
         let part_id = Uuid::new_v4();
 
-        let admit_msg = ClientMessage::AdmitParticipant { participant_id: part_id };
+        let admit_msg = ClientMessage::AdmitParticipant {
+            participant_id: part_id,
+        };
         let admit_json = serde_json::to_string(&admit_msg).expect("Serialize AdmitParticipant");
         assert!(admit_json.contains(r#""type":"admit_participant""#));
         assert!(admit_json.contains(&part_id.to_string()));
@@ -599,7 +671,9 @@ mod tests {
         let admit_all_json = serde_json::to_string(&admit_all_msg).expect("Serialize AdmitAll");
         assert_eq!(admit_all_json, r#"{"type":"admit_all"}"#);
 
-        let reject_msg = ClientMessage::RejectParticipant { participant_id: part_id };
+        let reject_msg = ClientMessage::RejectParticipant {
+            participant_id: part_id,
+        };
         let reject_json = serde_json::to_string(&reject_msg).expect("Serialize RejectParticipant");
         assert!(reject_json.contains(r#""type":"reject_participant""#));
         assert!(reject_json.contains(&part_id.to_string()));
@@ -612,14 +686,20 @@ mod tests {
             allow_unmute: true,
             watermark_enabled: true,
         };
-        let update_policy_msg = ClientMessage::UpdatePolicy { policy: policy.clone() };
-        let update_policy_json = serde_json::to_string(&update_policy_msg).expect("Serialize UpdatePolicy");
+        let update_policy_msg = ClientMessage::UpdatePolicy {
+            policy: policy.clone(),
+        };
+        let update_policy_json =
+            serde_json::to_string(&update_policy_msg).expect("Serialize UpdatePolicy");
         assert!(update_policy_json.contains(r#""type":"update_policy""#));
         assert!(update_policy_json.contains(r#""watermark_enabled":true"#));
 
         let toggle_msg = ClientMessage::ToggleWaitingRoom { enabled: true };
         let toggle_json = serde_json::to_string(&toggle_msg).expect("Serialize ToggleWaitingRoom");
-        assert_eq!(toggle_json, r#"{"type":"toggle_waiting_room","enabled":true}"#);
+        assert_eq!(
+            toggle_json,
+            r#"{"type":"toggle_waiting_room","enabled":true}"#
+        );
     }
 
     #[test]
@@ -633,11 +713,18 @@ mod tests {
             message: Some("Please wait, host will admit you shortly.".to_string()),
         };
         let status_json = serde_json::to_string(&status_msg).expect("Serialize WaitingRoomStatus");
-        let parsed_status: ServerMessage = serde_json::from_str(&status_json).expect("Deserialize WaitingRoomStatus");
+        let parsed_status: ServerMessage =
+            serde_json::from_str(&status_json).expect("Deserialize WaitingRoomStatus");
         match parsed_status {
-            ServerMessage::WaitingRoomStatus { is_waiting, message } => {
+            ServerMessage::WaitingRoomStatus {
+                is_waiting,
+                message,
+            } => {
                 assert!(is_waiting);
-                assert_eq!(message, Some("Please wait, host will admit you shortly.".to_string()));
+                assert_eq!(
+                    message,
+                    Some("Please wait, host will admit you shortly.".to_string())
+                );
             }
             _ => panic!("Expected WaitingRoomStatus"),
         }
@@ -650,9 +737,13 @@ mod tests {
             email: Some("bob@example.com".to_string()),
             joined_lobby_at: "2026-08-14T20:15:00Z".to_string(),
         };
-        let waiting_msg = ServerMessage::ParticipantWaiting { participant: waiting_dto.clone() };
-        let waiting_json = serde_json::to_string(&waiting_msg).expect("Serialize ParticipantWaiting");
-        let parsed_waiting: ServerMessage = serde_json::from_str(&waiting_json).expect("Deserialize ParticipantWaiting");
+        let waiting_msg = ServerMessage::ParticipantWaiting {
+            participant: waiting_dto.clone(),
+        };
+        let waiting_json =
+            serde_json::to_string(&waiting_msg).expect("Serialize ParticipantWaiting");
+        let parsed_waiting: ServerMessage =
+            serde_json::from_str(&waiting_json).expect("Deserialize ParticipantWaiting");
         match parsed_waiting {
             ServerMessage::ParticipantWaiting { participant } => {
                 assert_eq!(participant.participant_id, part_id);
@@ -663,20 +754,32 @@ mod tests {
         }
 
         // 3. ParticipantAdmitted
-        let admitted_msg = ServerMessage::ParticipantAdmitted { participant_id: part_id };
-        let admitted_json = serde_json::to_string(&admitted_msg).expect("Serialize ParticipantAdmitted");
-        let parsed_admitted: ServerMessage = serde_json::from_str(&admitted_json).expect("Deserialize ParticipantAdmitted");
+        let admitted_msg = ServerMessage::ParticipantAdmitted {
+            participant_id: part_id,
+        };
+        let admitted_json =
+            serde_json::to_string(&admitted_msg).expect("Serialize ParticipantAdmitted");
+        let parsed_admitted: ServerMessage =
+            serde_json::from_str(&admitted_json).expect("Deserialize ParticipantAdmitted");
         match parsed_admitted {
-            ServerMessage::ParticipantAdmitted { participant_id } => assert_eq!(participant_id, part_id),
+            ServerMessage::ParticipantAdmitted { participant_id } => {
+                assert_eq!(participant_id, part_id)
+            }
             _ => panic!("Expected ParticipantAdmitted"),
         }
 
         // 4. ParticipantRejected
-        let rejected_msg = ServerMessage::ParticipantRejected { participant_id: part_id };
-        let rejected_json = serde_json::to_string(&rejected_msg).expect("Serialize ParticipantRejected");
-        let parsed_rejected: ServerMessage = serde_json::from_str(&rejected_json).expect("Deserialize ParticipantRejected");
+        let rejected_msg = ServerMessage::ParticipantRejected {
+            participant_id: part_id,
+        };
+        let rejected_json =
+            serde_json::to_string(&rejected_msg).expect("Serialize ParticipantRejected");
+        let parsed_rejected: ServerMessage =
+            serde_json::from_str(&rejected_json).expect("Deserialize ParticipantRejected");
         match parsed_rejected {
-            ServerMessage::ParticipantRejected { participant_id } => assert_eq!(participant_id, part_id),
+            ServerMessage::ParticipantRejected { participant_id } => {
+                assert_eq!(participant_id, part_id)
+            }
             _ => panic!("Expected ParticipantRejected"),
         }
 
@@ -689,9 +792,13 @@ mod tests {
             allow_unmute: false,
             watermark_enabled: true,
         };
-        let policy_msg = ServerMessage::MeetingPolicyChanged { policy: policy.clone() };
-        let policy_json = serde_json::to_string(&policy_msg).expect("Serialize MeetingPolicyChanged");
-        let parsed_policy: ServerMessage = serde_json::from_str(&policy_json).expect("Deserialize MeetingPolicyChanged");
+        let policy_msg = ServerMessage::MeetingPolicyChanged {
+            policy: policy.clone(),
+        };
+        let policy_json =
+            serde_json::to_string(&policy_msg).expect("Serialize MeetingPolicyChanged");
+        let parsed_policy: ServerMessage =
+            serde_json::from_str(&policy_json).expect("Deserialize MeetingPolicyChanged");
         match parsed_policy {
             ServerMessage::MeetingPolicyChanged { policy: p } => {
                 assert!(p.is_locked);
@@ -716,9 +823,13 @@ mod tests {
         assert!(start_json.contains("rtmp://live.youtube.com/app"));
         assert!(start_json.contains("live_secret_key_123"));
 
-        let parsed_start: ClientMessage = serde_json::from_str(&start_json).expect("Deserialize StartStream");
+        let parsed_start: ClientMessage =
+            serde_json::from_str(&start_json).expect("Deserialize StartStream");
         match parsed_start {
-            ClientMessage::StartStream { rtmp_url, stream_key } => {
+            ClientMessage::StartStream {
+                rtmp_url,
+                stream_key,
+            } => {
                 assert_eq!(rtmp_url, "rtmp://live.youtube.com/app");
                 assert_eq!(stream_key, "live_secret_key_123");
             }
@@ -729,7 +840,8 @@ mod tests {
         let stop_json = serde_json::to_string(&stop_msg).expect("Serialize StopStream");
         assert_eq!(stop_json, r#"{"type":"stop_stream"}"#);
 
-        let parsed_stop: ClientMessage = serde_json::from_str(&stop_json).expect("Deserialize StopStream");
+        let parsed_stop: ClientMessage =
+            serde_json::from_str(&stop_json).expect("Deserialize StopStream");
         match parsed_stop {
             ClientMessage::StopStream => {}
             _ => panic!("Expected StopStream"),
@@ -744,15 +856,22 @@ mod tests {
             status: "live".to_string(),
             started_at: Some("2026-08-14T20:30:00Z".to_string()),
         };
-        let live_json = serde_json::to_string(&live_status_msg).expect("Serialize LiveStreamStatus");
+        let live_json =
+            serde_json::to_string(&live_status_msg).expect("Serialize LiveStreamStatus");
         assert!(live_json.contains(r#""type":"live_stream_status""#));
         assert!(live_json.contains(r#""is_streaming":true"#));
         assert!(live_json.contains("rtmp://a.rtmp.youtube.com/live2"));
         assert!(live_json.contains(r#""status":"live""#));
 
-        let parsed_live: ServerMessage = serde_json::from_str(&live_json).expect("Deserialize LiveStreamStatus");
+        let parsed_live: ServerMessage =
+            serde_json::from_str(&live_json).expect("Deserialize LiveStreamStatus");
         match parsed_live {
-            ServerMessage::LiveStreamStatus { is_streaming, rtmp_url, status, started_at } => {
+            ServerMessage::LiveStreamStatus {
+                is_streaming,
+                rtmp_url,
+                status,
+                started_at,
+            } => {
                 assert!(is_streaming);
                 assert_eq!(rtmp_url, "rtmp://a.rtmp.youtube.com/live2");
                 assert_eq!(status, "live");
@@ -767,10 +886,17 @@ mod tests {
             status: "idle".to_string(),
             started_at: None,
         };
-        let idle_json = serde_json::to_string(&idle_status_msg).expect("Serialize Idle LiveStreamStatus");
-        let parsed_idle: ServerMessage = serde_json::from_str(&idle_json).expect("Deserialize Idle LiveStreamStatus");
+        let idle_json =
+            serde_json::to_string(&idle_status_msg).expect("Serialize Idle LiveStreamStatus");
+        let parsed_idle: ServerMessage =
+            serde_json::from_str(&idle_json).expect("Deserialize Idle LiveStreamStatus");
         match parsed_idle {
-            ServerMessage::LiveStreamStatus { is_streaming, rtmp_url, status, started_at } => {
+            ServerMessage::LiveStreamStatus {
+                is_streaming,
+                rtmp_url,
+                status,
+                started_at,
+            } => {
                 assert!(!is_streaming);
                 assert_eq!(rtmp_url, "");
                 assert_eq!(status, "idle");
@@ -799,9 +925,15 @@ mod tests {
 
         // Test alias deserialization (caption_chunk)
         let alias_json = r#"{"type":"caption_chunk","text":"Interim speech chunk","is_final":false,"language":"en-US","timestamp_ms":1723680001000}"#;
-        let parsed_client: ClientMessage = serde_json::from_str(alias_json).expect("Deserialize SendCaption via alias");
+        let parsed_client: ClientMessage =
+            serde_json::from_str(alias_json).expect("Deserialize SendCaption via alias");
         match parsed_client {
-            ClientMessage::SendCaption { text, is_final, language, timestamp_ms } => {
+            ClientMessage::SendCaption {
+                text,
+                is_final,
+                language,
+                timestamp_ms,
+            } => {
                 assert_eq!(text, "Interim speech chunk");
                 assert!(!is_final);
                 assert_eq!(language, "en-US");
@@ -824,9 +956,17 @@ mod tests {
         assert!(srv_json.contains("Sarah Conner"));
         assert!(srv_json.contains("The system is fully operational."));
 
-        let parsed_srv: ServerMessage = serde_json::from_str(&srv_json).expect("Deserialize CaptionBroadcast");
+        let parsed_srv: ServerMessage =
+            serde_json::from_str(&srv_json).expect("Deserialize CaptionBroadcast");
         match parsed_srv {
-            ServerMessage::CaptionBroadcast { participant_id, speaker_name, text, is_final, language, timestamp_ms } => {
+            ServerMessage::CaptionBroadcast {
+                participant_id,
+                speaker_name,
+                text,
+                is_final,
+                language,
+                timestamp_ms,
+            } => {
                 assert_eq!(participant_id, part_id);
                 assert_eq!(speaker_name, "Sarah Conner");
                 assert_eq!(text, "The system is fully operational.");
@@ -847,8 +987,73 @@ mod tests {
             timestamp_ms: 1723680003000,
         };
         let chunk_json = serde_json::to_string(&chunk_dto).expect("Serialize CaptionChunkDto");
-        let parsed_dto: CaptionChunkDto = serde_json::from_str(&chunk_json).expect("Deserialize CaptionChunkDto");
+        let parsed_dto: CaptionChunkDto =
+            serde_json::from_str(&chunk_json).expect("Deserialize CaptionChunkDto");
         assert_eq!(parsed_dto, chunk_dto);
     }
-}
 
+    #[test]
+    fn test_ice_candidate_round_trip() {
+        let raw_json = r#"{"type":"ice_candidate","target":"subscribe","candidate":"candidate:1234 1 udp 2113937151 192.168.1.10 54321 typ host","sdp_mid":"0","sdp_mline_index":0,"username_fragment":"abc"}"#;
+        let msg: ServerMessage = serde_json::from_str(raw_json).expect("Deserialize IceCandidate");
+        let ServerMessage::IceCandidate {
+            target,
+            candidate,
+            sdp_mid,
+            sdp_mline_index,
+            username_fragment,
+        } = msg
+        else {
+            panic!("Expected IceCandidate variant");
+        };
+        assert_eq!(target, "subscribe");
+        assert!(candidate.contains("candidate:"));
+        assert_eq!(sdp_mid, Some("0".to_string()));
+        assert_eq!(sdp_mline_index, Some(0));
+        assert_eq!(username_fragment, Some("abc".to_string()));
+
+        let out = ClientMessage::IceCandidate {
+            target: "publish".to_string(),
+            candidate,
+            sdp_mid,
+            sdp_mline_index,
+            username_fragment,
+        };
+        let json = serde_json::to_string(&out).expect("Serialize IceCandidate");
+        assert!(json.contains(r#""type":"ice_candidate""#));
+        assert!(json.contains(r#""target":"publish""#));
+    }
+
+    #[test]
+    fn test_subscribe_offer_mapping_typed() {
+        let part_id = Uuid::new_v4();
+        let raw_json = format!(
+            r#"{{"type":"subscribe_offer","sdp":"v=0\\r\\no=- 0 0 IN IP4 0.0.0.0\\r\\n","mapping":[{{"track_id":"cam-video","publisher_id":"{part_id}","kind":"video","layer":"f"}}]}}"#
+        );
+        let msg: ServerMessage =
+            serde_json::from_str(&raw_json).expect("Deserialize SubscribeOffer");
+        let ServerMessage::SubscribeOffer { sdp, mapping } = msg else {
+            panic!("Expected SubscribeOffer variant");
+        };
+        assert!(sdp.starts_with("v=0"));
+        assert_eq!(mapping.len(), 1);
+        assert_eq!(mapping[0].track_id, "cam-video");
+        assert_eq!(mapping[0].publisher_id, part_id);
+        assert_eq!(mapping[0].kind, "video");
+        assert_eq!(mapping[0].layer, "f");
+    }
+
+    #[test]
+    fn test_join_meeting_response_ice_servers() {
+        let raw = r#"{"meetingId":"00000000-0000-0000-0000-000000000001","title":"Standup","participantId":"00000000-0000-0000-0000-000000000002","role":"host","isLocked":false,"wsUrl":"wss://x/v1/signal","roomToken":"tok","iceServers":[{"urls":["stun:stun.l.google.com:19302"],"username":"u","credential":"p"}]}"#;
+        let resp: crate::sdk::client::JoinMeetingResponse =
+            serde_json::from_str(raw).expect("Deserialize JoinMeetingResponse");
+        assert_eq!(resp.ice_servers.len(), 1);
+        assert_eq!(
+            resp.ice_servers[0].urls,
+            vec!["stun:stun.l.google.com:19302".to_string()]
+        );
+        assert_eq!(resp.ice_servers[0].username, Some("u".to_string()));
+        assert_eq!(resp.ice_servers[0].credential, Some("p".to_string()));
+    }
+}

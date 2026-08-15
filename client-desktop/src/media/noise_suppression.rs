@@ -1,5 +1,5 @@
-use std::collections::VecDeque;
 use nnnoiseless::DenoiseState;
+use std::collections::VecDeque;
 
 /// Real-time AI Noise Suppressor powered by the RNNoise recurrent neural network.
 ///
@@ -78,7 +78,9 @@ impl AiNoiseSuppressor {
             return 0.0;
         }
 
-        let vad = self.denoiser.process_frame(&mut output[..Self::FRAME_SIZE], &input[..Self::FRAME_SIZE]);
+        let vad = self
+            .denoiser
+            .process_frame(&mut output[..Self::FRAME_SIZE], &input[..Self::FRAME_SIZE]);
         self.vad_confidence = vad;
         vad
     }
@@ -109,7 +111,8 @@ impl AiNoiseSuppressor {
     /// denoises all complete frames, and returns the processed audio samples.
     pub fn process_stream_normalized(&mut self, input: &[f32]) -> Vec<f32> {
         for &s in input {
-            self.fifo_in.push_back((s * Self::SCALE_FACTOR).clamp(-32768.0, 32767.0));
+            self.fifo_in
+                .push_back((s * Self::SCALE_FACTOR).clamp(-32768.0, 32767.0));
         }
 
         let mut output = Vec::with_capacity(input.len());
@@ -240,7 +243,10 @@ mod tests {
 
         // Output silence should remain near zero
         for &sample in &frame {
-            assert!(sample.abs() < 10.0, "Denoised silence sample {sample} was unexpectedly loud");
+            assert!(
+                sample.abs() < 10.0,
+                "Denoised silence sample {sample} was unexpectedly loud"
+            );
         }
     }
 

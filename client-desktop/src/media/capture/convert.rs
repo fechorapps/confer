@@ -10,15 +10,18 @@ pub(crate) fn rgb_to_color32(raw: &[u8], width: usize, height: usize) -> Option<
     }
 
     let mut pixels = vec![Color32::BLACK; width * height];
-    pixels.par_chunks_mut(width).enumerate().for_each(|(row_y, row_pixels)| {
-        let row_offset = row_y * width * 3;
-        for (col_x, px) in row_pixels.iter_mut().enumerate() {
-            let idx = row_offset + col_x * 3;
-            if idx + 2 < raw.len() {
-                *px = Color32::from_rgb(raw[idx], raw[idx + 1], raw[idx + 2]);
+    pixels
+        .par_chunks_mut(width)
+        .enumerate()
+        .for_each(|(row_y, row_pixels)| {
+            let row_offset = row_y * width * 3;
+            for (col_x, px) in row_pixels.iter_mut().enumerate() {
+                let idx = row_offset + col_x * 3;
+                if idx + 2 < raw.len() {
+                    *px = Color32::from_rgb(raw[idx], raw[idx + 1], raw[idx + 2]);
+                }
             }
-        }
-    });
+        });
     Some(pixels)
 }
 
@@ -32,15 +35,18 @@ pub(crate) fn bgrx_to_color32(raw: &[u8], width: usize, height: usize) -> Option
     }
 
     let mut pixels = vec![Color32::BLACK; width * height];
-    pixels.par_chunks_mut(width).enumerate().for_each(|(row_y, row_pixels)| {
-        let row_offset = row_y * width * 4;
-        for (col_x, px) in row_pixels.iter_mut().enumerate() {
-            let idx = row_offset + col_x * 4;
-            if idx + 2 < raw.len() {
-                *px = Color32::from_rgb(raw[idx + 2], raw[idx + 1], raw[idx]);
+    pixels
+        .par_chunks_mut(width)
+        .enumerate()
+        .for_each(|(row_y, row_pixels)| {
+            let row_offset = row_y * width * 4;
+            for (col_x, px) in row_pixels.iter_mut().enumerate() {
+                let idx = row_offset + col_x * 4;
+                if idx + 2 < raw.len() {
+                    *px = Color32::from_rgb(raw[idx + 2], raw[idx + 1], raw[idx]);
+                }
             }
-        }
-    });
+        });
     Some(pixels)
 }
 
@@ -53,14 +59,17 @@ pub(crate) fn rgba_to_color32(raw: &[u8], width: usize, height: usize) -> Option
     }
 
     let mut pixels = vec![Color32::BLACK; width * height];
-    pixels.par_chunks_mut(width).enumerate().for_each(|(row_y, row_pixels)| {
-        let row_offset = row_y * width * 4;
-        for (col_x, px) in row_pixels.iter_mut().enumerate() {
-            let idx = row_offset + col_x * 4;
-            if idx + 2 < raw.len() {
-                *px = Color32::from_rgb(raw[idx], raw[idx + 1], raw[idx + 2]);
+    pixels
+        .par_chunks_mut(width)
+        .enumerate()
+        .for_each(|(row_y, row_pixels)| {
+            let row_offset = row_y * width * 4;
+            for (col_x, px) in row_pixels.iter_mut().enumerate() {
+                let idx = row_offset + col_x * 4;
+                if idx + 2 < raw.len() {
+                    *px = Color32::from_rgb(raw[idx], raw[idx + 1], raw[idx + 2]);
+                }
             }
-        }
-    });
+        });
     Some(pixels)
 }

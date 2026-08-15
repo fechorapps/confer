@@ -1,7 +1,3 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
 use ashpd::desktop::{
     screencast::{CursorMode, Screencast, SelectSourcesOptions, SourceType},
     PersistMode,
@@ -14,6 +10,10 @@ use pipewire::spa::param::video::VideoFormat;
 use pipewire::spa::pod::Pod;
 use pipewire::spa::utils::Direction;
 use pipewire::stream::{StreamFlags, StreamRc};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 use tokio::runtime::Runtime;
 
 use crate::media::capture::convert;
@@ -44,10 +44,18 @@ impl Default for PortalBackend {
 }
 
 impl ScreenCaptureBackend for PortalBackend {
-    fn start(&mut self, sink: FrameSink, _display: Option<&DisplayInfo>) -> Result<(), CaptureError> {
+    fn start(
+        &mut self,
+        sink: FrameSink,
+        _display: Option<&DisplayInfo>,
+    ) -> Result<(), CaptureError> {
         self.stop();
 
-        let is_running = Arc::new(AtomicBool::new(false));
+        // The flag starts `true` ("session active") and is what `stop()` flips
+        // to `false`. The negotiation below watches it so that stopping while
+        // the interactive picker dialog is still open aborts the wait instead
+        // of leaking a thread blocked on the D-Bus response forever.
+        let is_running = Arc::new(AtomicBool::new(true));
         self.is_running = is_running.clone();
         let last_error = Arc::new(Mutex::new(None));
         self.last_error = last_error.clone();
@@ -57,70 +65,43 @@ impl ScreenCaptureBackend for PortalBackend {
                 Ok(rt) => rt,
                 Err(e) => {
                     store_error(&last_error, CaptureError::PortalFailed(e.to_string()));
+                    is_running.store(false, Ordering::Relaxed);
                     return;
                 }
             };
 
+            let cancel = is_running.clone();
             let node_id = rt.block_on(async {
-                let cast = Screencast::new()
-                    .await
-                    .map_err(|e| CaptureError::PortalFailed(format!("Portal service unavailable: {e}")))?;
+                let negotiation = negotiate_portal_stream();
+                let cancel_watch = async move {
+                    while cancel.load(Ordering::Relaxed) {
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                    }
+                };
 
-                let session = cast
-                    .create_session(Default::default())
-                    .await
-                    .map_err(|e| CaptureError::PortalFailed(format!("Failed to create portal session: {e}")))?;
-
-                cast.select_sources(
-                    &session,
-                    SelectSourcesOptions::default()
-                        .set_cursor_mode(CursorMode::Metadata)
-                        .set_sources(SourceType::Monitor | SourceType::Window)
-                        .set_multiple(false)
-                        .set_persist_mode(PersistMode::DoNot),
-                )
-                .await
-                .map_err(|e| CaptureError::PortalFailed(format!("Failed to select sources: {e}")))?;
-
-                let start_response = cast
-                    .start(&session, None, Default::default())
-                    .await
-                    .map_err(|e| match e {
-                        ashpd::Error::Response(ashpd::desktop::ResponseError::Cancelled) => {
-                            CaptureError::PortalCancelled
-                        }
-                        other => CaptureError::PortalFailed(format!("Portal start failed: {other}")),
-                    })?;
-
-                let response = start_response
-                    .response()
-                    .map_err(|e| match e {
-                        ashpd::Error::Response(ashpd::desktop::ResponseError::Cancelled) => {
-                            CaptureError::PortalCancelled
-                        }
-                        other => CaptureError::PortalFailed(format!(
-                            "Failed to read portal start response: {other}"
-                        )),
-                    })?;
-
-                let stream = response
-                    .streams()
-                    .first()
-                    .ok_or_else(|| CaptureError::PortalFailed("No video stream returned from portal".to_string()))?;
-
-                Ok::<u32, CaptureError>(stream.pipe_wire_node_id())
+                tokio::select! {
+                    result = negotiation => Some(result),
+                    // Stop requested while the user still had the picker open:
+                    // exit quietly (not an error worth reporting).
+                    _ = cancel_watch => None,
+                }
             });
 
             let node_id = match node_id {
-                Ok(id) => id,
-                Err(e) => {
+                Some(Ok(id)) => id,
+                Some(Err(e)) => {
                     store_error(&last_error, e);
+                    is_running.store(false, Ordering::Relaxed);
                     return;
                 }
+                None => return,
             };
 
-            is_running.store(true, Ordering::Relaxed);
-            capture_pipewire_loop(node_id, sink, is_running, &last_error);
+            if !is_running.load(Ordering::Relaxed) {
+                return;
+            }
+            capture_pipewire_loop(node_id, sink, is_running.clone(), &last_error);
+            is_running.store(false, Ordering::Relaxed);
         });
 
         self.worker_handle = Some(handle);
@@ -139,7 +120,10 @@ impl ScreenCaptureBackend for PortalBackend {
     }
 
     fn take_error(&mut self) -> Option<CaptureError> {
-        self.last_error.lock().ok().and_then(|mut guard| guard.take())
+        self.last_error
+            .lock()
+            .ok()
+            .and_then(|mut guard| guard.take())
     }
 }
 
@@ -148,6 +132,55 @@ fn store_error(slot: &Arc<Mutex<Option<CaptureError>>>, error: CaptureError) {
     if let Ok(mut guard) = slot.lock() {
         *guard = Some(error);
     }
+}
+
+/// Runs the interactive xdg-desktop-portal flow (session → source picker →
+/// start) and returns the PipeWire node id of the stream the user picked.
+async fn negotiate_portal_stream() -> Result<u32, CaptureError> {
+    let cast = Screencast::new()
+        .await
+        .map_err(|e| CaptureError::PortalFailed(format!("Portal service unavailable: {e}")))?;
+
+    let session = cast
+        .create_session(Default::default())
+        .await
+        .map_err(|e| CaptureError::PortalFailed(format!("Failed to create portal session: {e}")))?;
+
+    cast.select_sources(
+        &session,
+        SelectSourcesOptions::default()
+            .set_cursor_mode(CursorMode::Metadata)
+            .set_sources(SourceType::Monitor | SourceType::Window)
+            .set_multiple(false)
+            .set_persist_mode(PersistMode::DoNot),
+    )
+    .await
+    .map_err(|e| CaptureError::PortalFailed(format!("Failed to select sources: {e}")))?;
+
+    let start_response = cast
+        .start(&session, None, Default::default())
+        .await
+        .map_err(|e| match e {
+            ashpd::Error::Response(ashpd::desktop::ResponseError::Cancelled) => {
+                CaptureError::PortalCancelled
+            }
+            other => CaptureError::PortalFailed(format!("Portal start failed: {other}")),
+        })?;
+
+    let response = start_response.response().map_err(|e| match e {
+        ashpd::Error::Response(ashpd::desktop::ResponseError::Cancelled) => {
+            CaptureError::PortalCancelled
+        }
+        other => {
+            CaptureError::PortalFailed(format!("Failed to read portal start response: {other}"))
+        }
+    })?;
+
+    let stream = response.streams().first().ok_or_else(|| {
+        CaptureError::PortalFailed("No video stream returned from portal".to_string())
+    })?;
+
+    Ok(stream.pipe_wire_node_id())
 }
 
 impl Drop for PortalBackend {
@@ -176,7 +209,10 @@ fn capture_pipewire_loop(
     let mainloop = match MainLoopRc::new(None) {
         Ok(m) => m,
         Err(e) => {
-            store_error(last_error, CaptureError::PortalFailed(format!("PipeWire MainLoop failed: {e}")));
+            store_error(
+                last_error,
+                CaptureError::PortalFailed(format!("PipeWire MainLoop failed: {e}")),
+            );
             return;
         }
     };
@@ -184,7 +220,10 @@ fn capture_pipewire_loop(
     let context = match ContextRc::new(&mainloop, None) {
         Ok(c) => c,
         Err(e) => {
-            store_error(last_error, CaptureError::PortalFailed(format!("PipeWire Context failed: {e}")));
+            store_error(
+                last_error,
+                CaptureError::PortalFailed(format!("PipeWire Context failed: {e}")),
+            );
             return;
         }
     };
@@ -192,7 +231,10 @@ fn capture_pipewire_loop(
     let core = match context.connect_rc(None) {
         Ok(c) => c,
         Err(e) => {
-            store_error(last_error, CaptureError::PortalFailed(format!("PipeWire Core connect failed: {e}")));
+            store_error(
+                last_error,
+                CaptureError::PortalFailed(format!("PipeWire Core connect failed: {e}")),
+            );
             return;
         }
     };
@@ -206,7 +248,10 @@ fn capture_pipewire_loop(
     let stream = match StreamRc::new(core, "confer-screencast", props) {
         Ok(s) => s,
         Err(e) => {
-            store_error(last_error, CaptureError::PortalFailed(format!("PipeWire Stream create failed: {e}")));
+            store_error(
+                last_error,
+                CaptureError::PortalFailed(format!("PipeWire Stream create failed: {e}")),
+            );
             return;
         }
     };
@@ -243,7 +288,9 @@ fn capture_pipewire_loop(
             }
         })
         .param_changed(|_stream, user_data, id, param| {
-            let Some(param) = param else { return; };
+            let Some(param) = param else {
+                return;
+            };
             if id != pipewire::spa::param::ParamType::Format.as_raw() {
                 return;
             }
@@ -275,36 +322,57 @@ fn capture_pipewire_loop(
             if let Some(mut buffer) = stream.dequeue_buffer() {
                 let datas = buffer.datas_mut();
                 if let Some(data) = datas.first_mut() {
-                    let chunk_size = data.chunk().size() as usize;
-                    if let Some(slice) = data.data() {
+                    let chunk = data.chunk();
+                    let chunk_size = chunk.size() as usize;
+                    let chunk_offset = chunk.offset() as usize;
+                    let chunk_stride = chunk.stride() as usize;
+                    if let Some(mapped) = data.data() {
                         let w = user_data.width.max(1);
                         let h = user_data.height.max(1);
-                        let expected_size = w * h * 4;
+                        let tight_row = w * 4;
 
-                        let (actual_w, actual_h) = if chunk_size >= expected_size {
+                        let (actual_w, actual_h) = if chunk_size >= w * h * 4 {
                             (w, h)
-                        } else if chunk_size >= 4 {
-                            let total_px = chunk_size / 4;
-                            if total_px >= w {
-                                (w, total_px / w)
-                            } else {
-                                (w, h)
-                            }
+                        } else if chunk_size >= tight_row {
+                            // Partial frame: only whole rows below are usable.
+                            (w, chunk_size / tight_row)
                         } else {
-                            (w, h)
+                            (0, 0)
                         };
+                        if actual_w == 0 || actual_h == 0 {
+                            return;
+                        }
+
+                        // PipeWire may pad rows (stride > width * bpp) or offset
+                        // the frame inside the mapped buffer; converters expect
+                        // tightly packed pixels, so copy row-by-row in that case.
+                        let tight: Option<std::borrow::Cow<'_, [u8]>> = (|| {
+                            let base = mapped.get(chunk_offset..)?;
+                            if chunk_stride == 0 || chunk_stride == tight_row {
+                                return Some(std::borrow::Cow::Borrowed(base));
+                            }
+                            if chunk_stride < tight_row {
+                                return None;
+                            }
+                            let mut buf = Vec::with_capacity(tight_row * actual_h);
+                            for row in 0..actual_h {
+                                let start = row * chunk_stride;
+                                let end = start + tight_row;
+                                buf.extend_from_slice(base.get(start..end)?);
+                            }
+                            Some(std::borrow::Cow::Owned(buf))
+                        })(
+                        );
+                        let Some(tight) = tight else { return };
+                        let slice: &[u8] = &tight;
 
                         let pixels = match user_data.format {
                             VideoFormat::RGBA | VideoFormat::RGBx => {
                                 convert::rgba_to_color32(slice, actual_w, actual_h)
                             }
-                            VideoFormat::RGB => {
-                                convert::rgb_to_color32(slice, actual_w, actual_h)
-                            }
-                            _ => {
-                                convert::bgrx_to_color32(slice, actual_w, actual_h)
-                                    .or_else(|| convert::rgba_to_color32(slice, actual_w, actual_h))
-                            }
+                            VideoFormat::RGB => convert::rgb_to_color32(slice, actual_w, actual_h),
+                            _ => convert::bgrx_to_color32(slice, actual_w, actual_h)
+                                .or_else(|| convert::rgba_to_color32(slice, actual_w, actual_h)),
                         };
 
                         if let Some(pixels) = pixels {
@@ -385,7 +453,10 @@ fn capture_pipewire_loop(
     ) {
         Ok((cursor, _)) => cursor.into_inner(),
         Err(e) => {
-            store_error(last_error, CaptureError::PortalFailed(format!("Failed to serialize SPA format pod: {e}")));
+            store_error(
+                last_error,
+                CaptureError::PortalFailed(format!("Failed to serialize SPA format pod: {e}")),
+            );
             return;
         }
     };
@@ -393,14 +464,24 @@ fn capture_pipewire_loop(
     let mut params = [match Pod::from_bytes(&values) {
         Some(p) => p,
         None => {
-            store_error(last_error, CaptureError::PortalFailed("Failed to parse Pod from serialized format bytes".to_string()));
+            store_error(
+                last_error,
+                CaptureError::PortalFailed(
+                    "Failed to parse Pod from serialized format bytes".to_string(),
+                ),
+            );
             return;
         }
     }];
 
     let flags = StreamFlags::AUTOCONNECT | StreamFlags::MAP_BUFFERS;
     if let Err(e) = stream.connect(Direction::Input, Some(node_id), flags, &mut params) {
-        store_error(last_error, CaptureError::PortalFailed(format!("Failed to connect PipeWire stream to node {node_id}: {e}")));
+        store_error(
+            last_error,
+            CaptureError::PortalFailed(format!(
+                "Failed to connect PipeWire stream to node {node_id}: {e}"
+            )),
+        );
         return;
     }
 

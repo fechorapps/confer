@@ -1,14 +1,13 @@
+use egui::{Color32, ColorImage};
+use nokhwa::pixel_format::RgbFormat;
+use nokhwa::utils::{
+    CameraFormat, CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType, Resolution,
+};
+use nokhwa::Camera;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-use egui::{Color32, ColorImage};
-use nokhwa::pixel_format::RgbFormat;
-use nokhwa::utils::{
-    CameraFormat, CameraIndex, FrameFormat,
-    RequestedFormat, RequestedFormatType, Resolution,
-};
-use nokhwa::Camera;
 
 use crate::media::capture::convert;
 use crate::media::filters::VideoFilter;
@@ -100,13 +99,12 @@ fn try_init_hardware_camera(width: usize, height: usize) -> Option<Camera> {
     let index = CameraIndex::Index(0);
 
     // 1. Try uncompressed YUYV format
-    let yuyv_fmt = RequestedFormat::new::<RgbFormat>(
-        RequestedFormatType::Closest(CameraFormat::new(
+    let yuyv_fmt =
+        RequestedFormat::new::<RgbFormat>(RequestedFormatType::Closest(CameraFormat::new(
             Resolution::new(width as u32, height as u32),
             FrameFormat::YUYV,
             30,
-        )),
-    );
+        )));
     if let Ok(mut cam) = Camera::new(index.clone(), yuyv_fmt) {
         if cam.open_stream().is_ok() {
             return Some(cam);
@@ -114,13 +112,12 @@ fn try_init_hardware_camera(width: usize, height: usize) -> Option<Camera> {
     }
 
     // 2. Try MJPEG format
-    let mjpeg_fmt = RequestedFormat::new::<RgbFormat>(
-        RequestedFormatType::Closest(CameraFormat::new(
+    let mjpeg_fmt =
+        RequestedFormat::new::<RgbFormat>(RequestedFormatType::Closest(CameraFormat::new(
             Resolution::new(width as u32, height as u32),
             FrameFormat::MJPEG,
             30,
-        )),
-    );
+        )));
     if let Ok(mut cam) = Camera::new(index.clone(), mjpeg_fmt) {
         if cam.open_stream().is_ok() {
             return Some(cam);
@@ -182,7 +179,13 @@ fn capture_loop(
 
                             frame_seq += 1;
                             if let Ok(mut guard) = frame_sink.lock() {
-                                *guard = Some((frame_seq, Arc::new(ColorImage { size: [w, h], pixels })));
+                                *guard = Some((
+                                    frame_seq,
+                                    Arc::new(ColorImage {
+                                        size: [w, h],
+                                        pixels,
+                                    }),
+                                ));
                             }
                             continue;
                         }
@@ -211,7 +214,13 @@ fn capture_loop(
 
         frame_seq += 1;
         if let Ok(mut guard) = frame_sink.lock() {
-            *guard = Some((frame_seq, Arc::new(ColorImage { size: [w, h], pixels })));
+            *guard = Some((
+                frame_seq,
+                Arc::new(ColorImage {
+                    size: [w, h],
+                    pixels,
+                }),
+            ));
         }
 
         // 30 FPS rate limiter for synthetic generator
@@ -262,7 +271,8 @@ fn generate_synthetic_avatar_frame(w: usize, h: usize, elapsed: f32) -> Vec<Colo
                 pixels.push(Color32::from_rgb(r, g, b));
             } else {
                 // Luxury Dark Background with subtle ambient gradient
-                let bg_val = (16.0 + y_ratio * 12.0 + (elapsed * 0.5).sin() * 4.0).clamp(12.0, 32.0) as u8;
+                let bg_val =
+                    (16.0 + y_ratio * 12.0 + (elapsed * 0.5).sin() * 4.0).clamp(12.0, 32.0) as u8;
                 pixels.push(Color32::from_rgb(bg_val, bg_val + 2, bg_val + 6));
             }
         }
@@ -273,7 +283,11 @@ fn generate_synthetic_avatar_frame(w: usize, h: usize, elapsed: f32) -> Vec<Colo
 #[cfg(target_os = "linux")]
 fn tune_v4l2_hardware_controls(device_path: &str) {
     use std::os::unix::io::AsRawFd;
-    if let Ok(file) = std::fs::OpenOptions::new().read(true).write(true).open(device_path) {
+    if let Ok(file) = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(device_path)
+    {
         let fd = file.as_raw_fd();
 
         #[repr(C)]

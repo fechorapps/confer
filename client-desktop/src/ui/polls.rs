@@ -86,9 +86,11 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                     );
                     ui.add_space(4.0);
                     ui.label(
-                        RichText::new("Create a poll to gather real-time feedback from participants.")
-                            .size(11.0)
-                            .color(Color32::from_rgb(100, 116, 139)),
+                        RichText::new(
+                            "Create a poll to gather real-time feedback from participants.",
+                        )
+                        .size(11.0)
+                        .color(Color32::from_rgb(100, 116, 139)),
                     );
                 });
                 return;
@@ -178,13 +180,16 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                                     });
                             }
 
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.label(
-                                    RichText::new(&poll.creator_name)
-                                        .size(10.0)
-                                        .color(Color32::from_rgb(100, 116, 139)),
-                                );
-                            });
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    ui.label(
+                                        RichText::new(&poll.creator_name)
+                                            .size(10.0)
+                                            .color(Color32::from_rgb(100, 116, 139)),
+                                    );
+                                },
+                            );
                         });
 
                         ui.add_space(6.0);
@@ -215,24 +220,36 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                         // --- Options rendering ---
                         if !poll.is_closed && !has_voted {
                             // User is actively voting
-                            let selected_set = app
-                                .poll_selected_options
-                                .entry(poll_id)
-                                .or_default();
+                            let selected_set =
+                                app.poll_selected_options.entry(poll_id).or_default();
 
                             for opt in &poll.options {
                                 let is_selected = selected_set.contains(&opt.id);
 
                                 if poll.multi_choice {
                                     let mut checked = is_selected;
-                                    if ui.checkbox(&mut checked, RichText::new(&opt.text).size(12.0).color(Color32::WHITE)).changed() {
+                                    if ui
+                                        .checkbox(
+                                            &mut checked,
+                                            RichText::new(&opt.text)
+                                                .size(12.0)
+                                                .color(Color32::WHITE),
+                                        )
+                                        .changed()
+                                    {
                                         if checked {
                                             selected_set.insert(opt.id);
                                         } else {
                                             selected_set.remove(&opt.id);
                                         }
                                     }
-                                } else if ui.radio(is_selected, RichText::new(&opt.text).size(12.0).color(Color32::WHITE)).clicked() {
+                                } else if ui
+                                    .radio(
+                                        is_selected,
+                                        RichText::new(&opt.text).size(12.0).color(Color32::WHITE),
+                                    )
+                                    .clicked()
+                                {
                                     selected_set.clear();
                                     selected_set.insert(opt.id);
                                 }
@@ -263,11 +280,11 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                         } else {
                             // Results view with live percentage progress bars
                             for opt in &poll.options {
-                                let pct = compute_option_percentage(opt.vote_count, poll.total_votes);
+                                let pct =
+                                    compute_option_percentage(opt.vote_count, poll.total_votes);
 
-                                let user_voted_this = user_votes
-                                    .map(|v| v.contains(&opt.id))
-                                    .unwrap_or(false);
+                                let user_voted_this =
+                                    user_votes.map(|v| v.contains(&opt.id)).unwrap_or(false);
 
                                 ui.horizontal(|ui| {
                                     let label_color = if user_voted_this {
@@ -283,18 +300,21 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                                             .color(label_color),
                                     );
 
-                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        ui.label(
-                                            RichText::new(format!(
-                                                "{} ({:.0}%)",
-                                                opt.vote_count,
-                                                pct * 100.0
-                                            ))
-                                            .size(10.0)
-                                            .strong()
-                                            .color(Color32::from_rgb(148, 163, 184)),
-                                        );
-                                    });
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            ui.label(
+                                                RichText::new(format!(
+                                                    "{} ({:.0}%)",
+                                                    opt.vote_count,
+                                                    pct * 100.0
+                                                ))
+                                                .size(10.0)
+                                                .strong()
+                                                .color(Color32::from_rgb(148, 163, 184)),
+                                            );
+                                        },
+                                    );
                                 });
 
                                 ui.add_space(2.0);
@@ -308,7 +328,8 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                                 );
 
                                 // Background track
-                                ui.painter().rect_filled(rect, 4.0, Color32::from_rgb(38, 42, 48));
+                                ui.painter()
+                                    .rect_filled(rect, 4.0, Color32::from_rgb(38, 42, 48));
 
                                 // Filled portion
                                 if pct > 0.0 {
@@ -335,22 +356,25 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                             ui.separator();
                             ui.add_space(4.0);
 
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui
-                                    .add(
-                                        egui::Button::new(
-                                            RichText::new("🔒 End & Close Poll")
-                                                .size(10.0)
-                                                .color(Color32::from_rgb(254, 205, 211)),
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if ui
+                                        .add(
+                                            egui::Button::new(
+                                                RichText::new("🔒 End & Close Poll")
+                                                    .size(10.0)
+                                                    .color(Color32::from_rgb(254, 205, 211)),
+                                            )
+                                            .fill(Color32::from_rgb(159, 18, 57))
+                                            .rounding(4.0),
                                         )
-                                        .fill(Color32::from_rgb(159, 18, 57))
-                                        .rounding(4.0),
-                                    )
-                                    .clicked()
-                                {
-                                    poll_to_close = Some(poll_id);
-                                }
-                            });
+                                        .clicked()
+                                    {
+                                        poll_to_close = Some(poll_id);
+                                    }
+                                },
+                            );
                         }
                     });
 
@@ -434,7 +458,9 @@ fn render_poll_creation_form(app: &mut ConferApp, ui: &mut Ui) {
                         && ui
                             .add(
                                 egui::Button::new(
-                                    RichText::new("✕").size(10.0).color(Color32::from_rgb(248, 113, 113)),
+                                    RichText::new("✕")
+                                        .size(10.0)
+                                        .color(Color32::from_rgb(248, 113, 113)),
                                 )
                                 .fill(Color32::from_rgb(38, 42, 48))
                                 .rounding(4.0),
@@ -474,12 +500,16 @@ fn render_poll_creation_form(app: &mut ConferApp, ui: &mut Ui) {
             // Settings
             ui.checkbox(
                 &mut app.poll_create_multi_choice,
-                RichText::new("Allow multiple choices").size(11.0).color(Color32::WHITE),
+                RichText::new("Allow multiple choices")
+                    .size(11.0)
+                    .color(Color32::WHITE),
             );
             ui.add_space(4.0);
             ui.checkbox(
                 &mut app.poll_create_anonymous,
-                RichText::new("Anonymous responses").size(11.0).color(Color32::WHITE),
+                RichText::new("Anonymous responses")
+                    .size(11.0)
+                    .color(Color32::WHITE),
             );
 
             ui.add_space(12.0);
@@ -491,7 +521,8 @@ fn render_poll_creation_form(app: &mut ConferApp, ui: &mut Ui) {
                     .iter()
                     .filter(|o| !o.trim().is_empty())
                     .collect();
-                let can_launch = !app.poll_create_question.trim().is_empty() && valid_options.len() >= 2;
+                let can_launch =
+                    !app.poll_create_question.trim().is_empty() && valid_options.len() >= 2;
 
                 let launch_btn = egui::Button::new(
                     RichText::new("🚀 Launch Poll")
@@ -553,9 +584,24 @@ mod tests {
             creator_name: "Host".to_string(),
             question: "Choose meeting time:".to_string(),
             options: vec![
-                PollOptionDto { id: 0, text: "9:00 AM".to_string(), vote_count: 2, voter_ids: vec![] },
-                PollOptionDto { id: 1, text: "1:00 PM".to_string(), vote_count: 5, voter_ids: vec![] },
-                PollOptionDto { id: 2, text: "4:00 PM".to_string(), vote_count: 3, voter_ids: vec![] },
+                PollOptionDto {
+                    id: 0,
+                    text: "9:00 AM".to_string(),
+                    vote_count: 2,
+                    voter_ids: vec![],
+                },
+                PollOptionDto {
+                    id: 1,
+                    text: "1:00 PM".to_string(),
+                    vote_count: 5,
+                    voter_ids: vec![],
+                },
+                PollOptionDto {
+                    id: 2,
+                    text: "4:00 PM".to_string(),
+                    vote_count: 3,
+                    voter_ids: vec![],
+                },
             ],
             multi_choice: false,
             is_anonymous: true,

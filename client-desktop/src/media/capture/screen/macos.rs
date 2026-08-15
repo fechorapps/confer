@@ -16,7 +16,11 @@ impl Default for MacOsBackend {
 }
 
 impl ScreenCaptureBackend for MacOsBackend {
-    fn start(&mut self, _sink: FrameSink, _display: Option<&DisplayInfo>) -> Result<(), CaptureError> {
+    fn start(
+        &mut self,
+        _sink: FrameSink,
+        _display: Option<&DisplayInfo>,
+    ) -> Result<(), CaptureError> {
         Err(CaptureError::UnsupportedPlatform(
             "macOS ScreenCaptureKit capture is planned for phase 3".to_string(),
         ))

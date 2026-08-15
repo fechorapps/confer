@@ -1,5 +1,5 @@
-use egui::{Color32, RichText, Stroke, Ui};
 use crate::app::ConferApp;
+use egui::{Color32, RichText, Stroke, Ui};
 
 pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
     let is_host = app.my_role == "host";

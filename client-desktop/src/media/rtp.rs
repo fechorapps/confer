@@ -1,6 +1,6 @@
+use crate::media::crypto::{SFrameEngine, SFrameError};
 use egui::ColorImage;
 use thiserror::Error;
-use crate::media::crypto::{SFrameEngine, SFrameError};
 
 /// RTP / Media Transport error types.
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -112,7 +112,11 @@ impl RtpHeader {
     /// Serializes the RTP header into a byte vector.
     pub fn serialize_into(&self, buf: &mut Vec<u8>) {
         let p_bit = if self.padding { 0x20 } else { 0x00 };
-        let x_bit = if self.extension && self.extension_data.is_some() { 0x10 } else { 0x00 };
+        let x_bit = if self.extension && self.extension_data.is_some() {
+            0x10
+        } else {
+            0x00
+        };
         let cc = (self.csrc_list.len().min(15) as u8) & 0x0F;
 
         // Byte 0: V(2) | P(1) | X(1) | CC(4)
@@ -195,7 +199,12 @@ impl RtpHeader {
 
         let mut csrc_list = Vec::with_capacity(csrc_count);
         for _ in 0..csrc_count {
-            let csrc = u32::from_be_bytes([raw[offset], raw[offset + 1], raw[offset + 2], raw[offset + 3]]);
+            let csrc = u32::from_be_bytes([
+                raw[offset],
+                raw[offset + 1],
+                raw[offset + 2],
+                raw[offset + 3],
+            ]);
             csrc_list.push(csrc);
             offset += 4;
         }
@@ -267,7 +276,9 @@ impl RtpPacket {
 
     /// Serializes the entire RTP packet to a byte buffer.
     pub fn serialize(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.header.serialized_size() + self.payload.len() + self.padding_len);
+        let mut buf = Vec::with_capacity(
+            self.header.serialized_size() + self.payload.len() + self.padding_len,
+        );
         let mut header = self.header.clone();
         if self.padding_len > 0 {
             header.padding = true;
@@ -460,7 +471,8 @@ impl Vp8PayloadDescriptor {
         let has_tid = self.temporal_layer_id.is_some();
         let has_key_idx = self.key_index.is_some();
 
-        let has_extension = self.extended_control || has_picture_id || has_tl0 || has_tid || has_key_idx;
+        let has_extension =
+            self.extended_control || has_picture_id || has_tl0 || has_tid || has_key_idx;
 
         // Byte 0: X | R | N | S | PartID
         let mut byte0 = self.partition_index & 0x0F;
@@ -514,7 +526,11 @@ impl Vp8PayloadDescriptor {
             // Optional TID / KEYIDX
             if has_tid || has_key_idx {
                 let tid = self.temporal_layer_id.unwrap_or(0) & 0x03;
-                let y = if self.layer_sync.unwrap_or(false) { 0x20 } else { 0x00 };
+                let y = if self.layer_sync.unwrap_or(false) {
+                    0x20
+                } else {
+                    0x00
+                };
                 let key_idx = self.key_index.unwrap_or(0) & 0x1F;
                 let t_k_byte = (tid << 6) | y | key_idx;
                 buf.push(t_k_byte);
@@ -543,7 +559,9 @@ impl Vp8PayloadDescriptor {
 
         if extended_control {
             if data.len() <= offset {
-                return Err(RtpError::InvalidVp8Descriptor("Truncated extension byte".to_string()));
+                return Err(RtpError::InvalidVp8Descriptor(
+                    "Truncated extension byte".to_string(),
+                ));
             }
 
             let ext_byte = data[offset];
@@ -556,7 +574,9 @@ impl Vp8PayloadDescriptor {
 
             if has_picture_id {
                 if data.len() <= offset {
-                    return Err(RtpError::InvalidVp8Descriptor("Truncated PictureID".to_string()));
+                    return Err(RtpError::InvalidVp8Descriptor(
+                        "Truncated PictureID".to_string(),
+                    ));
                 }
                 let pic_byte0 = data[offset];
                 offset += 1;
@@ -564,7 +584,9 @@ impl Vp8PayloadDescriptor {
                 if (pic_byte0 & 0x80) != 0 {
                     // 15-bit Picture ID
                     if data.len() <= offset {
-                        return Err(RtpError::InvalidVp8Descriptor("Truncated 15-bit PictureID".to_string()));
+                        return Err(RtpError::InvalidVp8Descriptor(
+                            "Truncated 15-bit PictureID".to_string(),
+                        ));
                     }
                     let pic_byte1 = data[offset];
                     offset += 1;
@@ -578,7 +600,9 @@ impl Vp8PayloadDescriptor {
 
             if has_tl0 {
                 if data.len() <= offset {
-                    return Err(RtpError::InvalidVp8Descriptor("Truncated TL0PICIDX".to_string()));
+                    return Err(RtpError::InvalidVp8Descriptor(
+                        "Truncated TL0PICIDX".to_string(),
+                    ));
                 }
                 tl0_pic_idx = Some(data[offset]);
                 offset += 1;
@@ -586,7 +610,9 @@ impl Vp8PayloadDescriptor {
 
             if has_tid || has_key_idx {
                 if data.len() <= offset {
-                    return Err(RtpError::InvalidVp8Descriptor("Truncated TID/KEYIDX".to_string()));
+                    return Err(RtpError::InvalidVp8Descriptor(
+                        "Truncated TID/KEYIDX".to_string(),
+                    ));
                 }
                 let tk_byte = data[offset];
                 offset += 1;
@@ -639,7 +665,8 @@ impl Vp8FrameHeader {
         let is_keyframe = (b0 & 0x01) == 0;
         let version = (b0 >> 1) & 0x07;
         let show_frame = (b0 & 0x10) != 0;
-        let first_partition_size = (b0 as u32 >> 5) | ((payload[1] as u32) << 3) | ((payload[2] as u32) << 11);
+        let first_partition_size =
+            (b0 as u32 >> 5) | ((payload[1] as u32) << 3) | ((payload[2] as u32) << 11);
 
         let mut width = None;
         let mut height = None;
@@ -675,10 +702,8 @@ impl Vp8FrameHeader {
         let h_bytes = (height & 0x3FFF).to_le_bytes();
 
         [
-            b0, b1, b2,
-            0x9D, 0x01, 0x2A, // VP8 Start Code
-            w_bytes[0], w_bytes[1],
-            h_bytes[0], h_bytes[1],
+            b0, b1, b2, 0x9D, 0x01, 0x2A, // VP8 Start Code
+            w_bytes[0], w_bytes[1], h_bytes[0], h_bytes[1],
         ]
     }
 }
@@ -779,7 +804,12 @@ impl Vp8Packetizer {
             rtp_payload.extend_from_slice(&desc_buf);
             rtp_payload.extend_from_slice(chunk);
 
-            let mut header = RtpHeader::new(self.payload_type, self.sequence_number, timestamp, self.ssrc);
+            let mut header = RtpHeader::new(
+                self.payload_type,
+                self.sequence_number,
+                timestamp,
+                self.ssrc,
+            );
             header.marker = is_last; // Marker bit set on final packet of video frame (RFC 7741 §4.1)
 
             self.sequence_number = self.sequence_number.wrapping_add(1);
@@ -890,7 +920,9 @@ impl Vp8FrameAssembler {
             let (descriptor, desc_len) = Vp8PayloadDescriptor::parse(&pkt.payload)?;
             if idx == 0 {
                 if !descriptor.start_of_partition {
-                    return Err(RtpError::InvalidVp8Descriptor("First packet missing S bit".to_string()));
+                    return Err(RtpError::InvalidVp8Descriptor(
+                        "First packet missing S bit".to_string(),
+                    ));
                 }
                 first_descriptor = Some(descriptor);
             }
@@ -956,7 +988,12 @@ impl OpusPacketizer {
         opus_payload: &[u8],
         audio_level: Option<AudioLevelExtension>,
     ) -> RtpPacket {
-        let mut header = RtpHeader::new(self.payload_type, self.sequence_number, self.timestamp, self.ssrc);
+        let mut header = RtpHeader::new(
+            self.payload_type,
+            self.sequence_number,
+            self.timestamp,
+            self.ssrc,
+        );
 
         // Include RFC 6464 audio level header extension if configured
         if let (Some(ext_id), Some(level)) = (self.audio_level_ext_id, audio_level) {
@@ -1000,7 +1037,10 @@ pub struct OpusDepacketizer;
 
 impl OpusDepacketizer {
     /// Extracts Opus audio payload and optional RFC 6464 audio level from an RTP packet.
-    pub fn depacketize(packet: &RtpPacket, audio_level_ext_id: Option<u8>) -> Result<OpusAudioFrame, RtpError> {
+    pub fn depacketize(
+        packet: &RtpPacket,
+        audio_level_ext_id: Option<u8>,
+    ) -> Result<OpusAudioFrame, RtpError> {
         let mut audio_level = None;
 
         if packet.header.extension {
@@ -1115,7 +1155,8 @@ pub fn capture_frame_to_vp8_rtp_packets(
     // Simulate compressed VP8 partition payload from raw pixel buffer
     let mut payload = Vec::new();
     if is_keyframe {
-        let key_hdr = Vp8FrameHeader::build_keyframe_header(width, height, raw_pixels.len().min(4096));
+        let key_hdr =
+            Vp8FrameHeader::build_keyframe_header(width, height, raw_pixels.len().min(4096));
         payload.extend_from_slice(&key_hdr);
     } else {
         // Interframe 3-byte header
@@ -1189,7 +1230,8 @@ pub fn capture_frame_to_encrypted_vp8_rtp_packets(
 
     let mut payload = Vec::new();
     if is_keyframe {
-        let key_hdr = Vp8FrameHeader::build_keyframe_header(width, height, raw_pixels.len().min(4096));
+        let key_hdr =
+            Vp8FrameHeader::build_keyframe_header(width, height, raw_pixels.len().min(4096));
         payload.extend_from_slice(&key_hdr);
     } else {
         let part_size = (raw_pixels.len().min(4096) as u32) & 0x7FFFF;
@@ -1298,13 +1340,18 @@ mod tests {
         assert_eq!(parsed.csrc_list[0], 0x11111111);
         assert_eq!(parsed.csrc_list[1], 0x22222222);
         assert!(parsed.extension);
-        assert_eq!(parsed.extension_profile, Some(RtpHeader::ONE_BYTE_EXT_PROFILE));
+        assert_eq!(
+            parsed.extension_profile,
+            Some(RtpHeader::ONE_BYTE_EXT_PROFILE)
+        );
 
-        let ext_parsed = OneByteHeaderExtension::parse_list(parsed.extension_data.as_ref().unwrap());
+        let ext_parsed =
+            OneByteHeaderExtension::parse_list(parsed.extension_data.as_ref().unwrap());
         assert_eq!(ext_parsed.len(), 1);
         assert_eq!(ext_parsed[0].id, 1);
 
-        let audio_level_parsed = AudioLevelExtension::from_one_byte_extension(&ext_parsed[0]).unwrap();
+        let audio_level_parsed =
+            AudioLevelExtension::from_one_byte_extension(&ext_parsed[0]).unwrap();
         assert!(audio_level_parsed.voice_activity);
         assert_eq!(audio_level_parsed.level_dbov, 30);
     }
@@ -1342,7 +1389,8 @@ mod tests {
         let mut buf = Vec::new();
         desc.write_to(&mut buf);
 
-        let (parsed, consumed) = Vp8PayloadDescriptor::parse(&buf).expect("Failed to parse VP8 descriptor");
+        let (parsed, consumed) =
+            Vp8PayloadDescriptor::parse(&buf).expect("Failed to parse VP8 descriptor");
         assert_eq!(consumed, buf.len());
         assert!(parsed.start_of_partition);
         assert!(!parsed.non_reference);
@@ -1372,7 +1420,8 @@ mod tests {
         assert_eq!(buf.len(), 3); // Byte0 (0x80 | 0x20) + ExtByte (0x80) + PicID (63 with MSB 0)
         assert_eq!(buf[2] & 0x80, 0); // 7-bit has MSB=0
 
-        let (parsed, consumed) = Vp8PayloadDescriptor::parse(&buf).expect("Failed to parse 7-bit PicID");
+        let (parsed, consumed) =
+            Vp8PayloadDescriptor::parse(&buf).expect("Failed to parse 7-bit PicID");
         assert_eq!(consumed, 3);
         assert_eq!(parsed.picture_id, Some(63));
         assert!(parsed.non_reference);
@@ -1414,7 +1463,8 @@ mod tests {
             assert_eq!(pkt.header.timestamp, timestamp);
             assert_eq!(pkt.header.ssrc, 0xCAFEBABE);
 
-            let (desc, _) = Vp8PayloadDescriptor::parse(&pkt.payload).expect("VP8 payload parse failed");
+            let (desc, _) =
+                Vp8PayloadDescriptor::parse(&pkt.payload).expect("VP8 payload parse failed");
             assert_eq!(desc.picture_id, Some(1));
 
             if i == 0 {
@@ -1509,12 +1559,15 @@ mod tests {
         assert_eq!(packet.header.timestamp, 0);
         assert!(packet.header.extension);
 
-        let depacketized = OpusDepacketizer::depacketize(&packet, Some(1)).expect("Depacketization failed");
+        let depacketized =
+            OpusDepacketizer::depacketize(&packet, Some(1)).expect("Depacketization failed");
         assert_eq!(depacketized.payload, synthetic_opus_bytes);
         assert_eq!(depacketized.sequence_number, 1);
         assert_eq!(depacketized.timestamp, 0);
 
-        let parsed_level = depacketized.audio_level.expect("Missing audio level extension");
+        let parsed_level = depacketized
+            .audio_level
+            .expect("Missing audio level extension");
         assert!(parsed_level.voice_activity);
         assert_eq!(parsed_level.level_dbov, 18);
     }
@@ -1548,7 +1601,8 @@ mod tests {
         };
 
         // 1. Packetize Keyframe
-        let key_packets = capture_frame_to_vp8_rtp_packets(&captured_frame, &mut packetizer, 90000, true);
+        let key_packets =
+            capture_frame_to_vp8_rtp_packets(&captured_frame, &mut packetizer, 90000, true);
         assert!(!key_packets.is_empty());
         assert_eq!(key_packets.first().unwrap().header.payload_type, 96);
         assert!(key_packets.last().unwrap().header.marker);
@@ -1566,7 +1620,8 @@ mod tests {
         assert_eq!(key_frame.timestamp, 90000);
 
         // 2. Packetize Interframe (delta frame)
-        let delta_packets = capture_frame_to_vp8_rtp_packets(&captured_frame, &mut packetizer, 93000, false);
+        let delta_packets =
+            capture_frame_to_vp8_rtp_packets(&captured_frame, &mut packetizer, 93000, false);
         assert!(!delta_packets.is_empty());
 
         let mut assembled_delta = None;
@@ -1602,8 +1657,16 @@ mod tests {
     fn test_opus_rtp_pipeline_with_sframe_e2ee() {
         use crate::media::crypto::CipherSuite;
 
-        let mut sframe_tx = SFrameEngine::from_shared_secret(CipherSuite::Aes128Gcm, b"audio_test_secret_passphrase").unwrap();
-        let mut sframe_rx = SFrameEngine::from_shared_secret(CipherSuite::Aes128Gcm, b"audio_test_secret_passphrase").unwrap();
+        let mut sframe_tx = SFrameEngine::from_shared_secret(
+            CipherSuite::Aes128Gcm,
+            b"audio_test_secret_passphrase",
+        )
+        .unwrap();
+        let mut sframe_rx = SFrameEngine::from_shared_secret(
+            CipherSuite::Aes128Gcm,
+            b"audio_test_secret_passphrase",
+        )
+        .unwrap();
 
         let mut packetizer = OpusPacketizer::new(0x11223344);
         let pcm_mic_samples = vec![15000i16; 960];
@@ -1612,21 +1675,22 @@ mod tests {
             &pcm_mic_samples,
             &mut packetizer,
             &mut sframe_tx,
-        ).expect("Audio SFrame packetize failed");
+        )
+        .expect("Audio SFrame packetize failed");
 
         assert_eq!(encrypted_rtp_packet.header.payload_type, 111);
         assert!(encrypted_rtp_packet.header.extension);
 
         // Depacketize and decrypt
-        let decrypted_opus_frame = OpusDepacketizer::depacketize_encrypted(
-            &encrypted_rtp_packet,
-            &mut sframe_rx,
-            Some(1),
-        ).expect("Audio SFrame depacketize and decrypt failed");
+        let decrypted_opus_frame =
+            OpusDepacketizer::depacketize_encrypted(&encrypted_rtp_packet, &mut sframe_rx, Some(1))
+                .expect("Audio SFrame depacketize and decrypt failed");
 
         assert!(!decrypted_opus_frame.payload.is_empty());
         assert_eq!(decrypted_opus_frame.payload[0], 0xF8); // TOC byte
-        let audio_level = decrypted_opus_frame.audio_level.expect("Missing audio level");
+        let audio_level = decrypted_opus_frame
+            .audio_level
+            .expect("Missing audio level");
         assert!(audio_level.voice_activity);
     }
 
@@ -1634,8 +1698,16 @@ mod tests {
     fn test_vp8_rtp_pipeline_with_sframe_e2ee() {
         use crate::media::crypto::CipherSuite;
 
-        let mut sframe_tx = SFrameEngine::from_shared_secret(CipherSuite::Aes256Gcm, b"video_test_secret_passphrase").unwrap();
-        let mut sframe_rx = SFrameEngine::from_shared_secret(CipherSuite::Aes256Gcm, b"video_test_secret_passphrase").unwrap();
+        let mut sframe_tx = SFrameEngine::from_shared_secret(
+            CipherSuite::Aes256Gcm,
+            b"video_test_secret_passphrase",
+        )
+        .unwrap();
+        let mut sframe_rx = SFrameEngine::from_shared_secret(
+            CipherSuite::Aes256Gcm,
+            b"video_test_secret_passphrase",
+        )
+        .unwrap();
 
         let mut packetizer = Vp8Packetizer::new(0x55667788).with_max_payload_size(500);
 
@@ -1654,7 +1726,8 @@ mod tests {
             &mut sframe_tx,
             90000,
             true,
-        ).expect("Video SFrame encryption failed");
+        )
+        .expect("Video SFrame encryption failed");
 
         assert!(encrypted_packets.len() >= 2);
 
@@ -1662,7 +1735,10 @@ mod tests {
         let mut assembler = Vp8FrameAssembler::new();
         let mut assembled_frame = None;
         for pkt in encrypted_packets {
-            if let Some(f) = assembler.push_packet_encrypted(&mut sframe_rx, pkt).unwrap() {
+            if let Some(f) = assembler
+                .push_packet_encrypted(&mut sframe_rx, pkt)
+                .unwrap()
+            {
                 assembled_frame = Some(f);
             }
         }

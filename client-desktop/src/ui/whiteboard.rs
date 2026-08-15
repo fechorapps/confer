@@ -2,9 +2,7 @@ use egui::{Align2, Color32, FontId, Pos2, Rect, RichText, Stroke, Ui, Vec2};
 use uuid::Uuid;
 
 use crate::app::ConferApp;
-use crate::sdk::protocol::{
-    WhiteboardColorDto, WhiteboardShapeDto, WhiteboardStrokeDto,
-};
+use crate::sdk::protocol::{WhiteboardColorDto, WhiteboardShapeDto, WhiteboardStrokeDto};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WhiteboardTool {
@@ -113,7 +111,8 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                             Stroke::new(1.0_f32, Color32::from_rgb(50, 55, 65))
                         };
 
-                        let (rect, resp) = ui.allocate_exact_size(Vec2::new(18.0, 18.0), egui::Sense::click());
+                        let (rect, resp) =
+                            ui.allocate_exact_size(Vec2::new(18.0, 18.0), egui::Sense::click());
                         ui.painter().rect(rect, 4.0, color, stroke);
                         if resp.clicked() {
                             app.whiteboard_color = color;
@@ -207,7 +206,8 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                                 .rounding(4.0),
                             )
                             .clicked()
-                            || (text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))))
+                            || (text_edit.lost_focus()
+                                && ui.input(|i| i.key_pressed(egui::Key::Enter))))
                             && !app.whiteboard_text_input.trim().is_empty()
                         {
                             let pos = app.whiteboard_text_pos.unwrap_or(Pos2::new(100.0, 100.0));
@@ -221,8 +221,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
 
         // --- Main Whiteboard Drawing Canvas ---
         let canvas_size = ui.available_size() - Vec2::new(0.0, 10.0);
-        let (response, painter) =
-            ui.allocate_painter(canvas_size, egui::Sense::click_and_drag());
+        let (response, painter) = ui.allocate_painter(canvas_size, egui::Sense::click_and_drag());
         let canvas_rect = response.rect;
 
         // Clip painter to canvas bounds
@@ -270,11 +269,19 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                             } else {
                                 app.whiteboard_current_points.push(rel_pos2);
                             }
-                        } else if response.drag_stopped() && !app.whiteboard_current_points.is_empty() {
+                        } else if response.drag_stopped()
+                            && !app.whiteboard_current_points.is_empty()
+                        {
                             let points = if app.whiteboard_current_points.len() == 1 {
                                 vec![
-                                    [app.whiteboard_current_points[0].x, app.whiteboard_current_points[0].y],
-                                    [app.whiteboard_current_points[0].x + 0.1, app.whiteboard_current_points[0].y + 0.1],
+                                    [
+                                        app.whiteboard_current_points[0].x,
+                                        app.whiteboard_current_points[0].y,
+                                    ],
+                                    [
+                                        app.whiteboard_current_points[0].x + 0.1,
+                                        app.whiteboard_current_points[0].y + 0.1,
+                                    ],
                                 ]
                             } else {
                                 app.whiteboard_current_points
@@ -313,7 +320,9 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                                 if start.distance(end) > 2.0 {
                                     let stroke = WhiteboardStrokeDto {
                                         id: Uuid::new_v4(),
-                                        participant_id: app.my_participant_id.unwrap_or(Uuid::nil()),
+                                        participant_id: app
+                                            .my_participant_id
+                                            .unwrap_or(Uuid::nil()),
                                         shape: WhiteboardShapeDto::Line {
                                             start: [start.x, start.y],
                                             end: [end.x, end.y],
@@ -347,7 +356,9 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                                 if start.distance(end) > 2.0 {
                                     let stroke = WhiteboardStrokeDto {
                                         id: Uuid::new_v4(),
-                                        participant_id: app.my_participant_id.unwrap_or(Uuid::nil()),
+                                        participant_id: app
+                                            .my_participant_id
+                                            .unwrap_or(Uuid::nil()),
                                         shape: WhiteboardShapeDto::Rectangle {
                                             start: [start.x, start.y],
                                             end: [end.x, end.y],
@@ -382,7 +393,9 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                                 if radius > 2.0 {
                                     let stroke = WhiteboardStrokeDto {
                                         id: Uuid::new_v4(),
-                                        participant_id: app.my_participant_id.unwrap_or(Uuid::nil()),
+                                        participant_id: app
+                                            .my_participant_id
+                                            .unwrap_or(Uuid::nil()),
                                         shape: WhiteboardShapeDto::Circle {
                                             center: [center.x, center.y],
                                             radius,
@@ -459,7 +472,11 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                     painter.circle_stroke(c, *radius, egui_stroke);
                 }
 
-                WhiteboardShapeDto::Text { pos, text, font_size } => {
+                WhiteboardShapeDto::Text {
+                    pos,
+                    text,
+                    font_size,
+                } => {
                     let p = canvas_rect.min + Vec2::new(pos[0], pos[1]);
                     painter.text(
                         p,
@@ -601,11 +618,16 @@ pub fn erase_strokes_at(strokes: &mut Vec<WhiteboardStrokeDto>, point: Pos2, era
                 d > threshold
             }
 
-            WhiteboardShapeDto::Text { pos, text, font_size } => {
+            WhiteboardShapeDto::Text {
+                pos,
+                text,
+                font_size,
+            } => {
                 let p = Pos2::new(pos[0], pos[1]);
                 let approx_w = (text.len() as f32 * font_size * 0.6).max(20.0);
                 let approx_h = *font_size * 1.3;
-                let text_rect = Rect::from_min_size(p, Vec2::new(approx_w, approx_h)).expand(threshold);
+                let text_rect =
+                    Rect::from_min_size(p, Vec2::new(approx_w, approx_h)).expand(threshold);
                 !text_rect.contains(point)
             }
         }
