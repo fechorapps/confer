@@ -13,6 +13,9 @@ using Confer.Application.Meetings.Governance.UpdatePolicy;
 using Confer.Application.Meetings.Stream.StartLiveStream;
 using Confer.Application.Meetings.Stream.StopLiveStream;
 using Confer.Domain.Enums;
+using Confer.Domain.Sessions;
+using Confer.Infrastructure.AI;
+using Confer.Infrastructure.Observability;
 using Confer.Shared.Application.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,15 +27,20 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
 {
     private readonly ILogger<WebSocketSignalingHandler> _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IConferAiCompanionService _aiService;
     private readonly ConcurrentDictionary<Guid, ConcurrentDictionary<Guid, WebSocket>> _roomSockets = new();
     private readonly ConcurrentDictionary<Guid, RoomTokenClaims> _socketClaims = new();
+    private readonly ConcurrentDictionary<Guid, List<ChatMessage>> _roomChatHistory = new();
+    private readonly ConcurrentDictionary<Guid, List<CaptionChunkDto>> _roomCaptionHistory = new();
 
     public WebSocketSignalingHandler(
         ILogger<WebSocketSignalingHandler> logger,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        IConferAiCompanionService aiService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _aiService = aiService;
     }
 
     public async Task HandleWebSocketAsync(HttpContext context, WebSocket webSocket, string? token)
@@ -182,10 +190,49 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
                     break;
 
                 case "chat":
-                    var body = node["body"]?.GetValue<string>() ?? string.Empty;
+                case "chat_message":
+                case "chat_send":
+                    var body = node["body"]?.GetValue<string>() ?? node["message"]?.GetValue<string>() ?? node["content"]?.GetValue<string>() ?? string.Empty;
                     if (!string.IsNullOrWhiteSpace(body))
                     {
-                        await BroadcastChatAsync(claims.MeetingId, Guid.NewGuid(), claims.ParticipantId, claims.DisplayName, body, DateTime.UtcNow);
+                        var msgId = Guid.NewGuid();
+                        var now = DateTime.UtcNow;
+                        await BroadcastChatAsync(claims.MeetingId, msgId, claims.ParticipantId, claims.DisplayName, body, now);
+
+                        // Record in room history
+                        var chatHistory = _roomChatHistory.GetOrAdd(claims.MeetingId, _ => new List<ChatMessage>());
+                        lock (chatHistory)
+                        {
+                            chatHistory.Add(ChatMessage.Create(claims.MeetingId, claims.ParticipantId, claims.DisplayName, body));
+                            if (chatHistory.Count > 100) chatHistory.RemoveAt(0);
+                        }
+
+                        // Check if message is addressed to Confer AI Copilot (@confer-ai or /ai)
+                        if (_aiService.IsAiCommand(body))
+                        {
+                            var captionHistory = _roomCaptionHistory.GetOrAdd(claims.MeetingId, _ => new List<CaptionChunkDto>());
+                            List<CaptionChunkDto> captionsSnapshot;
+                            List<ChatMessage> chatSnapshot;
+                            lock (captionHistory) { captionsSnapshot = captionHistory.ToList(); }
+                            lock (chatHistory) { chatSnapshot = chatHistory.ToList(); }
+
+                            var aiResponse = await _aiService.ProcessAiQueryAsync(
+                                claims.MeetingId,
+                                body,
+                                claims.DisplayName,
+                                chatSnapshot,
+                                captionsSnapshot);
+
+                            // Send AI Copilot reply to room
+                            await Task.Delay(250); // slight natural cadence
+                            await BroadcastChatAsync(
+                                claims.MeetingId,
+                                Guid.NewGuid(),
+                                Guid.Empty,
+                                "Confer AI Copilot",
+                                aiResponse,
+                                DateTime.UtcNow);
+                        }
                     }
                     break;
 
@@ -345,6 +392,16 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
                             timestampMs
                         );
                         await BroadcastCaptionAsync(claims.MeetingId, captionChunk);
+
+                        if (isFinal)
+                        {
+                            var captionHistory = _roomCaptionHistory.GetOrAdd(claims.MeetingId, _ => new List<CaptionChunkDto>());
+                            lock (captionHistory)
+                            {
+                                captionHistory.Add(captionChunk);
+                                if (captionHistory.Count > 200) captionHistory.RemoveAt(0);
+                            }
+                        }
                     }
                     break;
             }

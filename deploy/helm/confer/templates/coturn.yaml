@@ -1,0 +1,75 @@
+{{- if .Values.coturn.enabled -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "confer.fullname" . }}-coturn
+  labels:
+    {{- include "confer.labels" . | nindent 4 }}
+    app.kubernetes.io/component: coturn
+spec:
+  serviceName: {{ include "confer.fullname" . }}-coturn
+  replicas: {{ .Values.coturn.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "confer.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: coturn
+  template:
+    metadata:
+      labels:
+        {{- include "confer.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: coturn
+    spec:
+      containers:
+        - name: coturn
+          image: "{{ .Values.coturn.image.repository }}:{{ .Values.coturn.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          command:
+            - turnserver
+            - -n
+            - --log-file=stdout
+            - --realm={{ .Values.coturn.realm }}
+            - --use-auth-secret
+            - --static-auth-secret={{ .Values.coturn.staticAuthSecret }}
+            - --min-port={{ .Values.coturn.minPort }}
+            - --max-port={{ .Values.coturn.maxPort }}
+            - --fingerprint
+            - --lt-cred-mech
+          ports:
+            - name: stun-turn-udp
+              containerPort: 3478
+              protocol: UDP
+            - name: stun-turn-tcp
+              containerPort: 3478
+              protocol: TCP
+            - name: turns-tls-tcp
+              containerPort: 5349
+              protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "confer.fullname" . }}-coturn
+  labels:
+    {{- include "confer.labels" . | nindent 4 }}
+    app.kubernetes.io/component: coturn
+  annotations:
+    {{- toYaml .Values.coturn.service.annotations | nindent 4 }}
+spec:
+  type: {{ .Values.coturn.service.type }}
+  ports:
+    - port: 3478
+      targetPort: stun-turn-udp
+      protocol: UDP
+      name: stun-turn-udp
+    - port: 3478
+      targetPort: stun-turn-tcp
+      protocol: TCP
+      name: stun-turn-tcp
+    - port: 5349
+      targetPort: turns-tls-tcp
+      protocol: TCP
+      name: turns-tls-tcp
+  selector:
+    {{- include "confer.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: coturn
+{{- end }}

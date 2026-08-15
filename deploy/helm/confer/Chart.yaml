@@ -1,0 +1,19 @@
+apiVersion: v2
+name: confer
+description: Production-grade Helm chart for Confer WebRTC Zero-Delay Video Collaboration Platform
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - webrtc
+  - sfu
+  - videoconference
+  - dotnet
+  - rust
+  - real-time
+maintainers:
+  - name: Fechor Apps
+    email: contact@fechorapps.com
+    url: https://github.com/fechorapps/confer
+sources:
+  - https://github.com/fechorapps/confer

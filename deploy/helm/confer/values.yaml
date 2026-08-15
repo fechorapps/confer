@@ -1,0 +1,119 @@
+# Default values for Confer Helm Chart
+
+replicaCount: 3
+
+image:
+  repository: ghcr.io/fechorapps/confer-api
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "5000"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+
+service:
+  type: ClusterIP
+  port: 5000
+  targetPort: 5000
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/websocket-services: "confer"
+    nginx.ingress.kubernetes.io/proxy-body-size: "64m"
+  hosts:
+    - host: meet.confer.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: confer-tls-cert
+      hosts:
+        - meet.confer.local
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2048Mi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 15
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: 80
+
+# Application Configuration & Secrets
+config:
+  jwtSecret: "confer-super-secret-key-change-in-production-min-32-chars-length"
+  jwtIssuer: "confer.server"
+  jwtAudience: "confer.clients"
+  environment: "Production"
+
+# Database Configuration (PostgreSQL)
+postgresql:
+  enabled: true
+  host: "postgres-service"
+  port: 5432
+  database: "confer_db"
+  username: "confer_user"
+  password: "change-this-password-in-prod"
+
+# Distributed Presence & Caching (Redis)
+redis:
+  enabled: true
+  host: "redis-service"
+  port: 6379
+  password: ""
+
+# Coturn STUN/TURN Server for NAT Traversal
+coturn:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: coturn/coturn
+    tag: 4.6.3-alpine
+  realm: "turn.confer.local"
+  staticAuthSecret: "confer-turn-shared-secret-key"
+  minPort: 49152
+  maxPort: 49252
+  service:
+    type: LoadBalancer
+    annotations: {}
+
+# Prometheus Monitoring
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 15s
+    scrapeTimeout: 10s

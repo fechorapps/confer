@@ -55,6 +55,9 @@ public static class ServiceExtensions
         // iCalendar (.ics) Generator
         services.AddSingleton<ICalendarService, Calendar.IcsCalendarGenerator>();
 
+        // In-Room AI Copilot / Companion
+        services.AddSingleton<AI.IConferAiCompanionService, AI.ConferAiCompanionService>();
+
         return services;
     }
 }
