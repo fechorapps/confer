@@ -1,7 +1,8 @@
 use egui::{Color32, Pos2, Rect, RichText, Stroke, TextureHandle, Ui, Vec2};
 use uuid::Uuid;
 use crate::app::ConferApp;
-use crate::ui::{chat, controls, diagnostics, polls, roster, watermark, whiteboard};
+use crate::ui::{captions, chat, controls, diagnostics, polls, roster, watermark, whiteboard};
+
 
 pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
     let full_rect = ui.available_rect_before_wrap();
@@ -132,9 +133,13 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
         diagnostics::render_diagnostics(app, ui.ctx());
     }
 
+    // Floating Live Captions Overlay
+    captions::render_captions(app, ui, full_rect);
+
     // Bottom Control Dock
     controls::render_controls(app, ui);
 }
+
 
 /// Renders the Presentation Stage when Screen Sharing is active
 fn render_screen_share_stage(app: &mut ConferApp, ui: &mut Ui) {

@@ -1,5 +1,6 @@
 use egui::ColorImage;
 use thiserror::Error;
+use crate::media::crypto::{SFrameEngine, SFrameError};
 
 /// RTP / Media Transport error types.
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -724,6 +725,18 @@ impl Vp8Packetizer {
         self.packetize_with_picture_id(frame, timestamp, is_keyframe, pic_id)
     }
 
+    /// Packetizes a VP8 video frame, encrypting the frame with SFrame E2EE before RTP fragmentation.
+    pub fn packetize_encrypted(
+        &mut self,
+        sframe_engine: &mut SFrameEngine,
+        frame: &[u8],
+        timestamp: u32,
+        is_keyframe: bool,
+    ) -> Result<Vec<RtpPacket>, SFrameError> {
+        let encrypted_frame = sframe_engine.encrypt_frame(frame)?;
+        Ok(self.packetize(&encrypted_frame, timestamp, is_keyframe))
+    }
+
     /// Packetizes a VP8 frame using a specific PictureID.
     pub fn packetize_with_picture_id(
         &mut self,
@@ -839,6 +852,32 @@ impl Vp8FrameAssembler {
         Ok(None)
     }
 
+    /// Pushes an incoming RTP packet and decrypts the assembled VP8 frame with SFrame E2EE upon completion.
+    pub fn push_packet_encrypted(
+        &mut self,
+        sframe_engine: &mut SFrameEngine,
+        packet: RtpPacket,
+    ) -> Result<Option<Vp8Frame>, SFrameError> {
+        match self.push_packet(packet) {
+            Ok(Some(frame)) => {
+                let decrypted_payload = sframe_engine.decrypt_frame(&frame.payload)?;
+                let is_keyframe = if let Some(hdr) = Vp8FrameHeader::parse(&decrypted_payload) {
+                    hdr.is_keyframe
+                } else {
+                    frame.is_keyframe
+                };
+                Ok(Some(Vp8Frame {
+                    timestamp: frame.timestamp,
+                    picture_id: frame.picture_id,
+                    is_keyframe,
+                    payload: decrypted_payload,
+                }))
+            }
+            Ok(None) => Ok(None),
+            Err(e) => Err(SFrameError::DecryptionFailed(e.to_string())),
+        }
+    }
+
     fn assemble_frame(&self, packets: &[RtpPacket]) -> Result<Vp8Frame, RtpError> {
         if packets.is_empty() {
             return Err(RtpError::IncompleteFrame);
@@ -931,6 +970,18 @@ impl OpusPacketizer {
 
         RtpPacket::new(header, opus_payload.to_vec())
     }
+
+    /// Packetizes an Opus audio frame, encrypting the payload with SFrame E2EE while preserving
+    /// the RFC 6464 Audio Level header extension in the unencrypted RTP header for SFU routing.
+    pub fn packetize_encrypted(
+        &mut self,
+        sframe_engine: &mut SFrameEngine,
+        opus_payload: &[u8],
+        audio_level: Option<AudioLevelExtension>,
+    ) -> Result<RtpPacket, SFrameError> {
+        let encrypted_payload = sframe_engine.encrypt_frame(opus_payload)?;
+        Ok(self.packetize(&encrypted_payload, audio_level))
+    }
 }
 
 /// Decoded Opus Audio Frame.
@@ -968,6 +1019,23 @@ impl OpusDepacketizer {
             sequence_number: packet.header.sequence_number,
             timestamp: packet.header.timestamp,
             audio_level,
+        })
+    }
+
+    /// Depacketizes an RTP packet and decrypts the encrypted Opus audio payload with SFrame E2EE.
+    pub fn depacketize_encrypted(
+        packet: &RtpPacket,
+        sframe_engine: &mut SFrameEngine,
+        audio_level_ext_id: Option<u8>,
+    ) -> Result<OpusAudioFrame, SFrameError> {
+        let depack = Self::depacketize(packet, audio_level_ext_id)
+            .map_err(|e| SFrameError::DecryptionFailed(e.to_string()))?;
+        let decrypted_payload = sframe_engine.decrypt_frame(&depack.payload)?;
+        Ok(OpusAudioFrame {
+            payload: decrypted_payload,
+            sequence_number: depack.sequence_number,
+            timestamp: depack.timestamp,
+            audio_level: depack.audio_level,
         })
     }
 }
@@ -1085,6 +1153,93 @@ pub fn audio_samples_to_opus_rtp_packet(
     }
 
     packetizer.packetize(&opus_payload, Some(audio_level))
+}
+
+/// Encapsulates raw PCM microphone audio samples into an SFrame E2EE encrypted Opus RTP packet.
+pub fn audio_samples_to_encrypted_opus_rtp_packet(
+    samples: &[i16],
+    packetizer: &mut OpusPacketizer,
+    sframe_engine: &mut SFrameEngine,
+) -> Result<RtpPacket, SFrameError> {
+    let (is_voice, dbov) = compute_pcm_audio_level_dbov(samples);
+    let audio_level = AudioLevelExtension::new(is_voice, dbov);
+
+    let mut opus_payload = vec![0xF8]; // Opus Config TOC (CELT/SILK 20ms mono)
+    for chunk in samples.chunks(32) {
+        if let Some(s) = chunk.first() {
+            opus_payload.extend_from_slice(&s.to_be_bytes());
+        }
+    }
+
+    packetizer.packetize_encrypted(sframe_engine, &opus_payload, Some(audio_level))
+}
+
+/// Encapsulates captured video frames into SFrame E2EE encrypted VP8 RTP packets.
+pub fn capture_frame_to_encrypted_vp8_rtp_packets(
+    frame: &ColorImage,
+    packetizer: &mut Vp8Packetizer,
+    sframe_engine: &mut SFrameEngine,
+    timestamp: u32,
+    is_keyframe: bool,
+) -> Result<Vec<RtpPacket>, SFrameError> {
+    let (width, height) = (frame.size[0] as u16, frame.size[1] as u16);
+    let raw_pixels = &frame.pixels;
+
+    let mut payload = Vec::new();
+    if is_keyframe {
+        let key_hdr = Vp8FrameHeader::build_keyframe_header(width, height, raw_pixels.len().min(4096));
+        payload.extend_from_slice(&key_hdr);
+    } else {
+        let part_size = (raw_pixels.len().min(4096) as u32) & 0x7FFFF;
+        let b0 = ((part_size & 0x07) << 5) as u8 | 0x11;
+        let b1 = ((part_size >> 3) & 0xFF) as u8;
+        let b2 = ((part_size >> 11) & 0xFF) as u8;
+        payload.extend_from_slice(&[b0, b1, b2]);
+    }
+
+    for chunk in raw_pixels.chunks(16) {
+        if let Some(first) = chunk.first() {
+            payload.push(first.r());
+            payload.push(first.g());
+            payload.push(first.b());
+        }
+    }
+
+    packetizer.packetize_encrypted(sframe_engine, &payload, timestamp, is_keyframe)
+}
+
+/// Decrypts an Opus audio frame with SFrame E2EE engine.
+pub fn decrypt_opus_frame(
+    frame: &OpusAudioFrame,
+    sframe_engine: &mut SFrameEngine,
+) -> Result<OpusAudioFrame, SFrameError> {
+    let decrypted = sframe_engine.decrypt_frame(&frame.payload)?;
+    Ok(OpusAudioFrame {
+        payload: decrypted,
+        sequence_number: frame.sequence_number,
+        timestamp: frame.timestamp,
+        audio_level: frame.audio_level,
+    })
+}
+
+/// Decrypts an assembled VP8 video frame with SFrame E2EE engine.
+pub fn decrypt_vp8_frame(
+    frame: &Vp8Frame,
+    sframe_engine: &mut SFrameEngine,
+) -> Result<Vp8Frame, SFrameError> {
+    let decrypted = sframe_engine.decrypt_frame(&frame.payload)?;
+    let is_keyframe = if let Some(hdr) = Vp8FrameHeader::parse(&decrypted) {
+        hdr.is_keyframe
+    } else {
+        frame.is_keyframe
+    };
+
+    Ok(Vp8Frame {
+        timestamp: frame.timestamp,
+        picture_id: frame.picture_id,
+        is_keyframe,
+        payload: decrypted,
+    })
 }
 
 #[cfg(test)]
@@ -1439,5 +1594,80 @@ mod tests {
         let audio_level = decoded.audio_level.unwrap();
         assert_eq!(audio_level.voice_activity, true);
         assert!(audio_level.level_dbov < 20);
+    }
+
+    #[test]
+    fn test_opus_rtp_pipeline_with_sframe_e2ee() {
+        use crate::media::crypto::CipherSuite;
+
+        let mut sframe_tx = SFrameEngine::from_shared_secret(CipherSuite::Aes128Gcm, b"audio_test_secret_passphrase").unwrap();
+        let mut sframe_rx = SFrameEngine::from_shared_secret(CipherSuite::Aes128Gcm, b"audio_test_secret_passphrase").unwrap();
+
+        let mut packetizer = OpusPacketizer::new(0x11223344);
+        let pcm_mic_samples = vec![15000i16; 960];
+
+        let encrypted_rtp_packet = audio_samples_to_encrypted_opus_rtp_packet(
+            &pcm_mic_samples,
+            &mut packetizer,
+            &mut sframe_tx,
+        ).expect("Audio SFrame packetize failed");
+
+        assert_eq!(encrypted_rtp_packet.header.payload_type, 111);
+        assert_eq!(encrypted_rtp_packet.header.extension, true);
+
+        // Depacketize and decrypt
+        let decrypted_opus_frame = OpusDepacketizer::depacketize_encrypted(
+            &encrypted_rtp_packet,
+            &mut sframe_rx,
+            Some(1),
+        ).expect("Audio SFrame depacketize and decrypt failed");
+
+        assert!(!decrypted_opus_frame.payload.is_empty());
+        assert_eq!(decrypted_opus_frame.payload[0], 0xF8); // TOC byte
+        let audio_level = decrypted_opus_frame.audio_level.expect("Missing audio level");
+        assert_eq!(audio_level.voice_activity, true);
+    }
+
+    #[test]
+    fn test_vp8_rtp_pipeline_with_sframe_e2ee() {
+        use crate::media::crypto::CipherSuite;
+
+        let mut sframe_tx = SFrameEngine::from_shared_secret(CipherSuite::Aes256Gcm, b"video_test_secret_passphrase").unwrap();
+        let mut sframe_rx = SFrameEngine::from_shared_secret(CipherSuite::Aes256Gcm, b"video_test_secret_passphrase").unwrap();
+
+        let mut packetizer = Vp8Packetizer::new(0x55667788).with_max_payload_size(500);
+
+        let width = 64;
+        let height = 48;
+        let pixels = vec![Color32::from_rgb(100, 150, 200); width * height];
+        let captured_frame = ColorImage {
+            size: [width, height],
+            pixels,
+        };
+
+        // Encrypt & packetize keyframe
+        let encrypted_packets = capture_frame_to_encrypted_vp8_rtp_packets(
+            &captured_frame,
+            &mut packetizer,
+            &mut sframe_tx,
+            90000,
+            true,
+        ).expect("Video SFrame encryption failed");
+
+        assert!(encrypted_packets.len() >= 2);
+
+        // Reassemble and decrypt
+        let mut assembler = Vp8FrameAssembler::new();
+        let mut assembled_frame = None;
+        for pkt in encrypted_packets {
+            if let Some(f) = assembler.push_packet_encrypted(&mut sframe_rx, pkt).unwrap() {
+                assembled_frame = Some(f);
+            }
+        }
+
+        let frame = assembled_frame.expect("Frame should reassemble and decrypt");
+        assert_eq!(frame.is_keyframe, true);
+        assert_eq!(frame.timestamp, 90000);
+        assert!(!frame.payload.is_empty());
     }
 }

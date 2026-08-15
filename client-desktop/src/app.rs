@@ -10,10 +10,11 @@ use crate::media::virtual_background::VirtualBackgroundMode;
 use crate::media::{detect_displays, CameraCapturer, DisplayInfo, PickerMode, ScreenCapturer};
 use crate::sdk::client::ConferClient;
 use crate::sdk::protocol::{
-    ChatMessageDto, ClientMessage, MeetingPolicyDto, ParticipantState, PollDto, PollOptionDto,
-    ServerMessage, WaitingParticipantDto, WhiteboardColorDto, WhiteboardShapeDto,
+    CaptionChunkDto, ChatMessageDto, ClientMessage, MeetingPolicyDto, ParticipantState, PollDto,
+    PollOptionDto, ServerMessage, WaitingParticipantDto, WhiteboardColorDto, WhiteboardShapeDto,
     WhiteboardStrokeDto,
 };
+
 use crate::ui::whiteboard::{WhiteboardTool, WHITEBOARD_COLORS};
 use crate::ui::{lobby, meeting_room, waiting_lobby};
 
@@ -100,8 +101,11 @@ pub struct ConferApp {
     pub show_roster: bool,
     pub show_diagnostics: bool,
     pub show_polls: bool,
+    pub is_captions_enabled: bool,
+    pub active_captions: Vec<CaptionChunkDto>,
 
     // Whiteboard Engine & State
+
     pub is_whiteboard_active: bool,
     pub whiteboard_strokes: Vec<WhiteboardStrokeDto>,
     pub whiteboard_tool: WhiteboardTool,
@@ -193,8 +197,11 @@ impl ConferApp {
             show_roster: false,
             show_diagnostics: false,
             show_polls: false,
+            is_captions_enabled: false,
+            active_captions: Vec::new(),
 
             is_whiteboard_active: false,
+
             whiteboard_strokes: Vec::new(),
             whiteboard_tool: WhiteboardTool::Pen,
             whiteboard_color: WHITEBOARD_COLORS[0].0,
@@ -547,7 +554,42 @@ impl ConferApp {
         }
     }
 
+    pub fn toggle_captions(&mut self) {
+        self.is_captions_enabled = !self.is_captions_enabled;
+    }
+
+    #[allow(dead_code)]
+    pub fn send_caption(&mut self, text: &str, is_final: bool) {
+
+        let timestamp_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+
+        self.client.send_message(ClientMessage::SendCaption {
+            text: text.to_string(),
+            is_final,
+            language: "en-US".to_string(),
+            timestamp_ms,
+        });
+    }
+
+    pub fn add_caption_chunk(&mut self, chunk: CaptionChunkDto) {
+        if let Some(existing) = self.active_captions.iter_mut().rev().find(|c| c.participant_id == chunk.participant_id && !c.is_final) {
+            existing.text = chunk.text;
+            existing.is_final = chunk.is_final;
+            existing.language = chunk.language;
+            existing.timestamp_ms = chunk.timestamp_ms;
+        } else {
+            self.active_captions.push(chunk);
+            if self.active_captions.len() > 10 {
+                self.active_captions.remove(0);
+            }
+        }
+    }
+
     pub fn add_whiteboard_stroke(&mut self, stroke: WhiteboardStrokeDto) {
+
         self.client.send_message(ClientMessage::WhiteboardStroke {
             stroke: stroke.clone(),
         });
@@ -691,11 +733,13 @@ impl ConferApp {
         self.whiteboard_strokes.clear();
         self.polls.clear();
         self.user_poll_votes.clear();
+        self.active_captions.clear();
         self.is_whiteboard_active = false;
         self.show_polls = false;
         self.current_meeting_id = None;
         self.current_join_code = None;
     }
+
 
     fn poll_incoming_messages(&mut self) {
         let mut messages = Vec::new();
@@ -755,7 +799,18 @@ impl ConferApp {
                         created_at: Instant::now(),
                     });
                 }
+                ServerMessage::CaptionBroadcast { participant_id, speaker_name, text, is_final, language, timestamp_ms } => {
+                    self.add_caption_chunk(CaptionChunkDto {
+                        participant_id,
+                        speaker_name,
+                        text,
+                        is_final,
+                        language,
+                        timestamp_ms,
+                    });
+                }
                 ServerMessage::PollCreated { poll } => {
+
                     if !self.polls.iter().any(|p| p.id == poll.id) {
                         self.polls.push(poll);
                     }

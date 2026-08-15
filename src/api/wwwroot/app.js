@@ -27,6 +27,10 @@
     isWhiteboardActive: false,
     isWaitingRoom: false,
     isWatermarkEnabled: false,
+    isCaptionsEnabled: false,
+    captionLang: 'en-US',
+    speechRecognition: null,
+    activeCaptions: new Map(),
     meetingPolicy: {
       is_locked: false,
       waiting_room_enabled: false,
@@ -67,6 +71,7 @@
       chat: "Chat",
       people: "People",
       polls: "Polls",
+      cc: "CC",
       security: "Security",
       leave: "Leave"
     },
@@ -89,10 +94,12 @@
       chat: "Chat",
       people: "Participantes",
       polls: "Encuestas",
+      cc: "Subtítulos",
       security: "Seguridad",
       leave: "Salir"
     }
   };
+
 
   // --- DOM Elements ---
   const els = {
@@ -139,6 +146,7 @@
     wbCloseBtn: document.getElementById('wb-close-btn'),
     watermarkOverlay: document.getElementById('watermark-overlay'),
     watermarkPattern: document.getElementById('watermark-pattern'),
+    liveCaptionsContainer: document.getElementById('live-captions-container'),
     reactionsContainer: document.getElementById('reactions-container'),
 
     // Side Drawer
@@ -193,8 +201,10 @@
     dockChatBtn: document.getElementById('dock-chat-btn'),
     dockRosterBtn: document.getElementById('dock-roster-btn'),
     dockPollsBtn: document.getElementById('dock-polls-btn'),
+    dockCcBtn: document.getElementById('dock-cc-btn'),
     dockSecurityBtn: document.getElementById('dock-security-btn'),
     dockLeaveBtn: document.getElementById('dock-leave-btn'),
+
 
     // Diagnostics Modal
     diagnosticsModal: document.getElementById('diagnostics-modal'),
@@ -296,8 +306,10 @@
     els.dockChatBtn.addEventListener('click', () => toggleDrawer('chat'));
     els.dockRosterBtn.addEventListener('click', () => toggleDrawer('roster'));
     els.dockPollsBtn.addEventListener('click', () => toggleDrawer('polls'));
+    els.dockCcBtn.addEventListener('click', () => toggleCaptions());
     els.dockSecurityBtn.addEventListener('click', () => toggleDrawer('security'));
     els.drawerCloseBtn.addEventListener('click', () => toggleDrawer(null));
+
 
     // Roster Subtabs
     els.tabInMeeting.addEventListener('click', () => {
@@ -424,7 +436,17 @@
     els.previewMicBtn.classList.toggle('active', !state.isMicMuted);
     els.previewMicBtn.classList.toggle('muted', state.isMicMuted);
     sendWsMessage({ type: 'mute_audio', is_muted: state.isMicMuted });
+
+    // Sync Web Speech STT Recognition
+    if (state.isCaptionsEnabled) {
+      if (state.isMicMuted) {
+        stopSpeechRecognition();
+      } else {
+        startSpeechRecognition();
+      }
+    }
   }
+
 
   function toggleCam() {
     state.isCamOff = !state.isCamOff;
@@ -729,8 +751,24 @@
       case 'live_stream_status':
         els.streamBadge.style.display = msg.is_streaming ? 'inline-block' : 'none';
         break;
+
+      case 'caption_broadcast':
+      case 'caption_chunk':
+        const cap = msg.caption || msg;
+        if (cap && cap.text) {
+          displayCaptionBubble({
+            participant_id: cap.participant_id,
+            speaker_name: cap.speaker_name || 'Participant',
+            text: cap.text,
+            is_final: cap.is_final ?? true,
+            language: cap.language || 'en-US',
+            timestamp_ms: cap.timestamp_ms || Date.now()
+          });
+        }
+        break;
     }
   }
+
 
   // --- View Transitions ---
   function switchToMeetingView() {
@@ -762,12 +800,17 @@
       state.ws = null;
     }
     clearInterval(state.pingInterval);
+    stopSpeechRecognition();
+    state.activeCaptions.forEach(c => clearTimeout(c.timeoutId));
+    state.activeCaptions.clear();
+    if (els.liveCaptionsContainer) els.liveCaptionsContainer.innerHTML = '';
     state.roster = [];
     state.chatMessages = [];
     state.polls = [];
     state.waitingParticipants = [];
 
     els.meetingView.style.display = 'none';
+
     els.waitingRoomView.style.display = 'none';
     els.lobbyView.style.display = 'flex';
     els.lobbyView.classList.add('active');
@@ -1154,6 +1197,181 @@
     updateWatermarkPattern();
   }
 
+  // --- Live Captions & Streaming Speech-to-Text Subsystem ---
+  function toggleCaptions(forceState = null) {
+    state.isCaptionsEnabled = forceState !== null ? forceState : !state.isCaptionsEnabled;
+    els.dockCcBtn.classList.toggle('active', state.isCaptionsEnabled);
+    els.liveCaptionsContainer.style.display = state.isCaptionsEnabled ? 'flex' : 'none';
+
+    if (state.isCaptionsEnabled) {
+      startSpeechRecognition();
+    } else {
+      stopSpeechRecognition();
+    }
+  }
+
+  function initSpeechRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.info("Web Speech API not supported in this browser environment; caption display active.");
+      return null;
+    }
+
+    const rec = new SpeechRecognition();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = state.captionLang || 'en-US';
+
+    rec.onresult = (event) => {
+      if (!state.isCaptionsEnabled || state.isMicMuted) return;
+
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const transcript = event.results[i][0].transcript.trim();
+        const isFinal = event.results[i].isFinal;
+
+        if (transcript) {
+          // Broadcast to server
+          sendWsMessage({
+            type: 'caption_chunk',
+            text: transcript,
+            is_final: isFinal,
+            language: state.captionLang,
+            timestamp_ms: Date.now()
+          });
+
+          // Render locally immediately
+          displayCaptionBubble({
+            participant_id: state.user.id,
+            speaker_name: `${state.user.name} (You)`,
+            text: transcript,
+            is_final: isFinal,
+            language: state.captionLang,
+            timestamp_ms: Date.now()
+          });
+        }
+      }
+    };
+
+    rec.onerror = (event) => {
+      if (event.error !== 'no-speech' && event.error !== 'aborted') {
+        console.warn("Speech recognition notice:", event.error);
+      }
+    };
+
+    rec.onend = () => {
+      if (state.isCaptionsEnabled && !state.isMicMuted && state.ws) {
+        try { rec.start(); } catch (e) {}
+      }
+    };
+
+    return rec;
+  }
+
+  function startSpeechRecognition() {
+    if (!state.speechRecognition) {
+      state.speechRecognition = initSpeechRecognition();
+    }
+    if (state.speechRecognition && !state.isMicMuted) {
+      try {
+        state.speechRecognition.start();
+      } catch (e) {}
+    }
+  }
+
+  function stopSpeechRecognition() {
+    if (state.speechRecognition) {
+      try {
+        state.speechRecognition.stop();
+      } catch (e) {}
+    }
+  }
+
+  function getInitials(name) {
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  }
+
+  function displayCaptionBubble(caption) {
+    if (!els.liveCaptionsContainer) return;
+    if (!state.isCaptionsEnabled) return;
+
+    const pId = caption.participant_id || 'default';
+    let entry = state.activeCaptions.get(pId);
+
+    if (entry && entry.element) {
+      clearTimeout(entry.timeoutId);
+      entry.element.classList.remove('fading');
+      const textEl = entry.element.querySelector('.caption-text');
+      if (textEl) {
+        textEl.textContent = caption.text;
+        textEl.className = `caption-text ${caption.is_final ? '' : 'interim'}`;
+      }
+      const pulseEl = entry.element.querySelector('.caption-interim-pulse');
+      if (pulseEl) {
+        pulseEl.style.display = caption.is_final ? 'none' : 'inline-block';
+      }
+    } else {
+      const bubble = document.createElement('div');
+      bubble.className = 'caption-bubble';
+
+      const pill = document.createElement('div');
+      pill.className = 'caption-speaker-pill';
+
+      const avatar = document.createElement('span');
+      avatar.className = 'caption-avatar-badge';
+      avatar.textContent = getInitials(caption.speaker_name);
+
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = caption.speaker_name || 'Participant';
+
+      pill.appendChild(avatar);
+      pill.appendChild(nameSpan);
+      bubble.appendChild(pill);
+
+      if (caption.language && caption.language !== 'en-US' && caption.language !== 'en') {
+        const langBadge = document.createElement('span');
+        langBadge.className = 'caption-lang-badge';
+        langBadge.textContent = `[${caption.language.toUpperCase()}]`;
+        bubble.appendChild(langBadge);
+      }
+
+      const textEl = document.createElement('span');
+      textEl.className = `caption-text ${caption.is_final ? '' : 'interim'}`;
+      textEl.textContent = caption.text;
+      bubble.appendChild(textEl);
+
+      const pulseEl = document.createElement('span');
+      pulseEl.className = 'caption-interim-pulse';
+      pulseEl.textContent = '⚡';
+      pulseEl.style.display = caption.is_final ? 'none' : 'inline-block';
+      bubble.appendChild(pulseEl);
+
+      els.liveCaptionsContainer.appendChild(bubble);
+
+      // Max 3 visible bubbles at once
+      while (els.liveCaptionsContainer.children.length > 3) {
+        els.liveCaptionsContainer.removeChild(els.liveCaptionsContainer.firstChild);
+      }
+
+      entry = { element: bubble, timeoutId: null };
+      state.activeCaptions.set(pId, entry);
+    }
+
+    entry.timeoutId = setTimeout(() => {
+      if (entry.element) {
+        entry.element.classList.add('fading');
+        setTimeout(() => {
+          if (entry.element && entry.element.parentNode) {
+            entry.element.parentNode.removeChild(entry.element);
+          }
+          state.activeCaptions.delete(pId);
+        }, 300);
+      }
+    }, 5500);
+  }
+
   // --- i18n ---
   function updateI18n() {
     const t = i18n[state.lang];
@@ -1171,9 +1389,11 @@
     els.dockScreenshareBtn.querySelector('span').textContent = t.share;
     els.dockWhiteboardBtn.querySelector('span').textContent = t.whiteboard;
     els.dockHandBtn.querySelector('span').textContent = t.hand;
+    if (els.dockCcBtn && els.dockCcBtn.querySelector('span')) els.dockCcBtn.querySelector('span').textContent = t.cc;
     els.dockLeaveBtn.querySelector('span').textContent = t.leave;
   }
 
   // Start Application
   window.addEventListener('DOMContentLoaded', init);
 })();
+

@@ -326,7 +326,29 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
                         await dispatcher.SendAsync(new StopLiveStreamCommand(claims.MeetingId, claims.UserId));
                     }
                     break;
+
+                case "caption_chunk":
+                case "send_caption":
+                    var captionText = node["text"]?.GetValue<string>() ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(captionText))
+                    {
+                        var isFinal = node["is_final"]?.GetValue<bool>() ?? false;
+                        var language = node["language"]?.GetValue<string>() ?? "en-US";
+                        var timestampMs = node["timestamp_ms"]?.GetValue<long>() ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+                        var captionChunk = new CaptionChunkDto(
+                            claims.ParticipantId,
+                            claims.DisplayName,
+                            captionText,
+                            isFinal,
+                            language,
+                            timestampMs
+                        );
+                        await BroadcastCaptionAsync(claims.MeetingId, captionChunk);
+                    }
+                    break;
             }
+
         }
         catch (Exception ex)
         {
@@ -504,7 +526,21 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
             ["started_at"] = startedAt?.ToString("o")
         });
 
+    public Task BroadcastCaptionAsync(Guid meetingId, CaptionChunkDto caption) =>
+        BroadcastToRoomAsync(meetingId, new JsonObject
+        {
+            ["type"] = "caption_broadcast",
+            ["participant_id"] = caption.ParticipantId.ToString(),
+            ["speaker_name"] = caption.SpeakerName,
+            ["text"] = caption.Text,
+            ["is_final"] = caption.IsFinal,
+            ["language"] = caption.Language,
+            ["timestamp_ms"] = caption.TimestampMs,
+            ["caption"] = JsonSerializer.SerializeToNode(caption)
+        });
+
     private async Task BroadcastToRoomAsync(Guid meetingId, JsonObject json, Guid? excludeParticipantId = null)
+
     {
         if (_roomSockets.TryGetValue(meetingId, out var sockets))
         {

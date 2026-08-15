@@ -191,11 +191,32 @@ public class SignalingIntegrationTests : IClassFixture<WebApplicationFactory<Pro
         aliceRanked.Should().NotBeNull();
         aliceRanked!.Count.Should().Be(2);
 
-        // 13. Test Alice Disconnect -> Host Receives participant_left
+        // 13. Test Live Captions Speech-to-Text Streaming Broadcast
+        await SendJsonAsync(aliceWs, new JsonObject
+        {
+            ["type"] = "caption_chunk",
+            ["text"] = "Welcome to the real-time conference call.",
+            ["is_final"] = true,
+            ["language"] = "en-US",
+            ["timestamp_ms"] = 1723680000000L
+        });
+
+        var hostCaptionMsg = await ReceiveMessageOfTypeAsync(hostWs, "caption_broadcast");
+        hostCaptionMsg["speaker_name"]?.GetValue<string>().Should().Be("Alice (Dev)");
+        hostCaptionMsg["text"]?.GetValue<string>().Should().Be("Welcome to the real-time conference call.");
+        hostCaptionMsg["is_final"]?.GetValue<bool>().Should().BeTrue();
+        hostCaptionMsg["language"]?.GetValue<string>().Should().Be("en-US");
+
+        var aliceCaptionMsg = await ReceiveMessageOfTypeAsync(aliceWs, "caption_broadcast");
+        aliceCaptionMsg["speaker_name"]?.GetValue<string>().Should().Be("Alice (Dev)");
+        aliceCaptionMsg["text"]?.GetValue<string>().Should().Be("Welcome to the real-time conference call.");
+
+        // 14. Test Alice Disconnect -> Host Receives participant_left
         await aliceWs.CloseAsync(WebSocketCloseStatus.NormalClosure, "Leaving meeting", CancellationToken.None);
 
         var hostLeftMsg = await ReceiveMessageOfTypeAsync(hostWs, "participant_left");
         hostLeftMsg["participant_id"]?.GetValue<string>().Should().Be(aliceJoinData.ParticipantId.ToString());
+
     }
 
     [Fact]

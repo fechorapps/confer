@@ -171,6 +171,24 @@ pub struct WaitingParticipantDto {
     pub joined_lobby_at: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CaptionChunkDto {
+    pub participant_id: Uuid,
+    pub speaker_name: String,
+    pub text: String,
+    #[serde(default)]
+    pub is_final: bool,
+    #[serde(default = "default_language")]
+    pub language: String,
+    #[serde(default)]
+    pub timestamp_ms: u64,
+}
+
+fn default_language() -> String {
+    "en-US".to_string()
+}
+
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientMessage {
@@ -238,6 +256,16 @@ pub enum ClientMessage {
         stream_key: String,
     },
     StopStream,
+    #[serde(alias = "caption_chunk")]
+    SendCaption {
+        text: String,
+        #[serde(default)]
+        is_final: bool,
+        #[serde(default = "default_language")]
+        language: String,
+        #[serde(default)]
+        timestamp_ms: u64,
+    },
     Ping {
         seq: u64,
     },
@@ -287,7 +315,20 @@ pub enum ServerMessage {
         from_name: String,
         emoji: String,
     },
+    #[serde(alias = "caption_chunk")]
+    CaptionBroadcast {
+        participant_id: Uuid,
+        speaker_name: String,
+        text: String,
+        #[serde(default)]
+        is_final: bool,
+        #[serde(default = "default_language")]
+        language: String,
+        #[serde(default)]
+        timestamp_ms: u64,
+    },
     PollCreated {
+
         poll: PollDto,
     },
     PollUpdated {
@@ -738,4 +779,76 @@ mod tests {
             _ => panic!("Expected LiveStreamStatus"),
         }
     }
+
+    #[test]
+    fn test_caption_messages_serialization_and_deserialization() {
+        let part_id = Uuid::new_v4();
+
+        // 1. ClientMessage::SendCaption
+        let client_cap = ClientMessage::SendCaption {
+            text: "Hello everyone, testing STT streaming captions.".to_string(),
+            is_final: true,
+            language: "en-US".to_string(),
+            timestamp_ms: 1723680000000,
+        };
+        let client_json = serde_json::to_string(&client_cap).expect("Serialize SendCaption");
+        assert!(client_json.contains(r#""type":"send_caption""#));
+        assert!(client_json.contains("Hello everyone, testing STT streaming captions."));
+        assert!(client_json.contains(r#""is_final":true"#));
+        assert!(client_json.contains(r#""language":"en-US""#));
+
+        // Test alias deserialization (caption_chunk)
+        let alias_json = r#"{"type":"caption_chunk","text":"Interim speech chunk","is_final":false,"language":"en-US","timestamp_ms":1723680001000}"#;
+        let parsed_client: ClientMessage = serde_json::from_str(alias_json).expect("Deserialize SendCaption via alias");
+        match parsed_client {
+            ClientMessage::SendCaption { text, is_final, language, timestamp_ms } => {
+                assert_eq!(text, "Interim speech chunk");
+                assert!(!is_final);
+                assert_eq!(language, "en-US");
+                assert_eq!(timestamp_ms, 1723680001000);
+            }
+            _ => panic!("Expected SendCaption variant"),
+        }
+
+        // 2. ServerMessage::CaptionBroadcast
+        let server_cap = ServerMessage::CaptionBroadcast {
+            participant_id: part_id,
+            speaker_name: "Sarah Conner".to_string(),
+            text: "The system is fully operational.".to_string(),
+            is_final: true,
+            language: "en-US".to_string(),
+            timestamp_ms: 1723680002000,
+        };
+        let srv_json = serde_json::to_string(&server_cap).expect("Serialize CaptionBroadcast");
+        assert!(srv_json.contains(r#""type":"caption_broadcast""#));
+        assert!(srv_json.contains("Sarah Conner"));
+        assert!(srv_json.contains("The system is fully operational."));
+
+        let parsed_srv: ServerMessage = serde_json::from_str(&srv_json).expect("Deserialize CaptionBroadcast");
+        match parsed_srv {
+            ServerMessage::CaptionBroadcast { participant_id, speaker_name, text, is_final, language, timestamp_ms } => {
+                assert_eq!(participant_id, part_id);
+                assert_eq!(speaker_name, "Sarah Conner");
+                assert_eq!(text, "The system is fully operational.");
+                assert!(is_final);
+                assert_eq!(language, "en-US");
+                assert_eq!(timestamp_ms, 1723680002000);
+            }
+            _ => panic!("Expected CaptionBroadcast variant"),
+        }
+
+        // Test CaptionChunkDto struct
+        let chunk_dto = CaptionChunkDto {
+            participant_id: part_id,
+            speaker_name: "David Developer".to_string(),
+            text: "Real-time speech recognition works great!".to_string(),
+            is_final: true,
+            language: "en-US".to_string(),
+            timestamp_ms: 1723680003000,
+        };
+        let chunk_json = serde_json::to_string(&chunk_dto).expect("Serialize CaptionChunkDto");
+        let parsed_dto: CaptionChunkDto = serde_json::from_str(&chunk_json).expect("Deserialize CaptionChunkDto");
+        assert_eq!(parsed_dto, chunk_dto);
+    }
 }
+

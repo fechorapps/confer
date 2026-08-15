@@ -1101,3 +1101,112 @@ input[type="text"]:focus {
   color: var(--text-primary);
   font-family: var(--font-mono);
 }
+
+/* Floating Live Captions Subtitles Subsystem */
+.live-captions-container {
+  position: absolute;
+  bottom: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(720px, 92vw);
+  z-index: 35;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.caption-bubble {
+  background: rgba(15, 17, 21, 0.90);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  pointer-events: auto;
+  max-width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  animation: captionBubbleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.caption-bubble.fading {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.caption-speaker-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-sky);
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+
+.caption-speaker-pill .caption-avatar-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-sky);
+  color: #000;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.caption-lang-badge {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.caption-text {
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.caption-text.interim {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.caption-interim-pulse {
+  display: inline-block;
+  color: var(--accent-amber);
+  margin-left: 4px;
+  animation: pulseDot 1s infinite alternate;
+}
+
+@keyframes captionBubbleIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes pulseDot {
+  from { opacity: 0.4; }
+  to { opacity: 1; }
+}
+

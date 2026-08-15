@@ -81,6 +81,14 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                         app.toggle_polls();
                     }
 
+                    // Live Captions / CC Subtitles Toggle
+                    let cc_bg = if app.is_captions_enabled { Color32::from_rgb(2, 132, 199) } else { Color32::from_rgb(26, 29, 33) };
+                    let cc_text = if app.is_captions_enabled { "💬 CC (On)" } else { "💬 CC" };
+                    if ui.add(egui::Button::new(RichText::new(cc_text).size(12.0).color(Color32::WHITE)).fill(cc_bg).rounding(18.0)).clicked() {
+                        app.toggle_captions();
+                    }
+
+
                     // Host Security Policy Menu Popup (🛡)
                     if is_host {
                         let sec_active = app.meeting_policy.is_locked || app.meeting_policy.waiting_room_enabled;

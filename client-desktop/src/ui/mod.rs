@@ -1,3 +1,4 @@
+pub mod captions;
 pub mod chat;
 pub mod controls;
 pub mod diagnostics;
@@ -8,3 +9,4 @@ pub mod roster;
 pub mod waiting_lobby;
 pub mod watermark;
 pub mod whiteboard;
+

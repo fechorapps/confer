@@ -27,5 +27,11 @@ nokhwa = { version = "0.10.11", features = ["input-v4l", "decoding"] }
 ashpd = { version = "0.13.13", features = ["tokio", "screencast"] }
 pipewire = "0.10.0"
 x11rb = { version = "0.14.0", features = ["all-extensions"] }
-zbus = "5.19"
+zbus = { version = "5.19", features = ["blocking"] }
 nnnoiseless = "0.5"
+
+# Cryptography dependencies for SFrame RFC E2EE
+aes-gcm = "0.10"
+hkdf = "0.12"
+sha2 = "0.10"
+subtle = "2.5"
