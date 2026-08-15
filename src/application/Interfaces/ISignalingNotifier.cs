@@ -18,4 +18,7 @@ public interface ISignalingNotifier
     Task BroadcastPollUpdatedAsync(Guid meetingId, PollDto poll);
     Task BroadcastPollClosedAsync(Guid meetingId, Guid pollId);
     Task BroadcastBreakoutInviteAsync(Guid meetingId, Guid participantId, BreakoutInviteDto invite);
+    Task BroadcastWaitingRoomUpdateAsync(Guid meetingId, bool isWaitingRoomEnabled, int waitingCount);
+    Task BroadcastPolicyChangedAsync(Guid meetingId, MeetingPolicyDto policy, bool isWatermarkEnabled = false, bool isWaitingRoomEnabled = false);
+    Task BroadcastParticipantAdmittedAsync(Guid meetingId, Guid participantId);
 }

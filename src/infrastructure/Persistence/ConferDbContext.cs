@@ -43,6 +43,17 @@ public sealed class ConferDbContext(DbContextOptions<ConferDbContext> options)
             builder.HasIndex(m => m.JoinCode).IsUnique();
             builder.Property(m => m.Title).IsRequired().HasMaxLength(200);
             builder.Property(m => m.RecordingMode).HasMaxLength(32);
+            builder.Property(m => m.IsWaitingRoomEnabled).HasDefaultValue(false);
+            builder.Property(m => m.IsWatermarkEnabled).HasDefaultValue(false);
+
+            builder.OwnsOne(m => m.Policy, policyBuilder =>
+            {
+                policyBuilder.Property(p => p.AllowScreenShare).HasDefaultValue(true);
+                policyBuilder.Property(p => p.AllowChat).HasDefaultValue(true);
+                policyBuilder.Property(p => p.AllowUnmuteSelf).HasDefaultValue(true);
+                policyBuilder.Property(p => p.MuteOnEntry).HasDefaultValue(false);
+                policyBuilder.Property(p => p.AllowRename).HasDefaultValue(true);
+            });
 
             builder.HasMany(m => m.Sessions)
                 .WithOne(s => s.Meeting)
@@ -98,6 +109,7 @@ public sealed class ConferDbContext(DbContextOptions<ConferDbContext> options)
             builder.HasKey(p => p.Id);
             builder.Property(p => p.DisplayName).IsRequired().HasMaxLength(150);
             builder.Property(p => p.Role).HasConversion<string>().HasMaxLength(32);
+            builder.Property(p => p.Status).HasConversion<string>().HasMaxLength(32);
             builder.Property(p => p.LeaveReason).HasConversion<string>().HasMaxLength(32);
             builder.HasIndex(p => p.SessionId);
             builder.HasIndex(p => p.UserId);

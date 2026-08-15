@@ -162,7 +162,56 @@ sealed class ClientMessage {
     data class WhiteboardUndo(
         @SerialName("stroke_id") val strokeId: String? = null
     ) : ClientMessage()
+
+    @Serializable
+    @SerialName("admit_participant")
+    data class AdmitParticipant(
+        @SerialName("participant_id") val participantId: String
+    ) : ClientMessage()
+
+    @Serializable
+    @SerialName("admit_all")
+    data class AdmitAll(
+        val reason: String = ""
+    ) : ClientMessage()
+
+    @Serializable
+    @SerialName("reject_participant")
+    data class RejectParticipant(
+        @SerialName("participant_id") val participantId: String
+    ) : ClientMessage()
+
+    @Serializable
+    @SerialName("update_policy")
+    data class UpdatePolicy(
+        val policy: MeetingPolicy
+    ) : ClientMessage()
+
+    @Serializable
+    @SerialName("toggle_waiting_room")
+    data class ToggleWaitingRoom(
+        val enabled: Boolean
+    ) : ClientMessage()
 }
+
+@Serializable
+data class MeetingPolicy(
+    @SerialName("is_locked") val isLocked: Boolean = false,
+    @SerialName("waiting_room_enabled") val waitingRoomEnabled: Boolean = false,
+    @SerialName("allow_screen_share") val allowScreenShare: Boolean = true,
+    @SerialName("allow_chat") val allowChat: Boolean = true,
+    @SerialName("allow_unmute") val allowUnmute: Boolean = true,
+    @SerialName("watermark_enabled") val watermarkEnabled: Boolean = false
+)
+
+@Serializable
+data class WaitingParticipant(
+    @SerialName("participant_id") val participantId: String,
+    @SerialName("user_id") val userId: String = "",
+    @SerialName("display_name") val displayName: String,
+    val email: String? = null,
+    @SerialName("joined_lobby_at") val joinedLobbyAt: String = ""
+)
 
 @Serializable
 sealed class ServerMessage {
@@ -226,6 +275,37 @@ sealed class ServerMessage {
     data class MeetingLocked(@SerialName("is_locked") val isLocked: Boolean) : ServerMessage()
 
     @Serializable
+    @SerialName("waiting_room_status")
+    data class WaitingRoomStatus(
+        @SerialName("is_waiting") val isWaiting: Boolean,
+        val message: String? = null
+    ) : ServerMessage()
+
+    @Serializable
+    @SerialName("participant_waiting")
+    data class ParticipantWaiting(
+        val participant: WaitingParticipant
+    ) : ServerMessage()
+
+    @Serializable
+    @SerialName("participant_admitted")
+    data class ParticipantAdmitted(
+        @SerialName("participant_id") val participantId: String
+    ) : ServerMessage()
+
+    @Serializable
+    @SerialName("participant_rejected")
+    data class ParticipantRejected(
+        @SerialName("participant_id") val participantId: String
+    ) : ServerMessage()
+
+    @Serializable
+    @SerialName("meeting_policy_changed")
+    data class MeetingPolicyChanged(
+        val policy: MeetingPolicy
+    ) : ServerMessage()
+
+    @Serializable
     @SerialName("meeting_ended")
     data class MeetingEnded(val reason: String) : ServerMessage()
 
@@ -257,4 +337,5 @@ sealed class ServerMessage {
     @SerialName("whiteboard_undo")
     data class WhiteboardUndo(@SerialName("stroke_id") val strokeId: String? = null) : ServerMessage()
 }
+
 

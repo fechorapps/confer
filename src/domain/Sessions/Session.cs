@@ -29,13 +29,18 @@ public sealed class Session
         };
     }
 
-    public Result<Participation> AddParticipant(Guid userId, string displayName, ParticipantRole role, string? clientInfo = null)
+    public Result<Participation> AddParticipant(
+        Guid userId,
+        string displayName,
+        ParticipantRole role,
+        string? clientInfo = null,
+        ParticipationStatus status = ParticipationStatus.Admitted)
     {
         var existing = Participations.FirstOrDefault(p => p.UserId == userId && p.LeftAt == null);
         if (existing is not null)
             return Result.Success(existing);
 
-        var participation = Participation.Create(Id, userId, displayName, role, clientInfo);
+        var participation = Participation.Create(Id, userId, displayName, role, clientInfo, status);
         Participations.Add(participation);
         return Result.Success(participation);
     }

@@ -1,7 +1,7 @@
 use egui::{Color32, Pos2, Rect, RichText, Stroke, TextureHandle, Ui, Vec2};
 use uuid::Uuid;
 use crate::app::ConferApp;
-use crate::ui::{chat, controls, diagnostics, polls, roster, whiteboard};
+use crate::ui::{chat, controls, diagnostics, polls, roster, watermark, whiteboard};
 
 pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
     let full_rect = ui.available_rect_before_wrap();
@@ -214,6 +214,11 @@ fn render_screen_share_stage(app: &mut ConferApp, ui: &mut Ui) {
                             ui.label(RichText::new("Initializing screen share stream...").size(14.0).color(Color32::from_rgb(148, 163, 184)));
                         });
                     }
+
+                    if app.is_watermark_enabled || app.meeting_policy.watermark_enabled {
+                        let stage_rect = ui.min_rect();
+                        watermark::render_watermark(ui, stage_rect, &app.user_display_name, &app.user_email);
+                    }
                 });
         });
 
@@ -267,6 +272,7 @@ fn render_screen_share_stage(app: &mut ConferApp, ui: &mut Ui) {
 }
 
 fn render_video_grid(app: &ConferApp, ui: &mut Ui) {
+    let grid_rect = ui.available_rect_before_wrap();
     let mut total_participants = Vec::new();
 
     // Local participant tile
@@ -336,6 +342,10 @@ fn render_video_grid(app: &ConferApp, ui: &mut Ui) {
                 }
             }
         });
+
+    if app.is_watermark_enabled || app.meeting_policy.watermark_enabled {
+        watermark::render_watermark(ui, grid_rect, &app.user_display_name, &app.user_email);
+    }
 }
 
 pub struct TileProps<'a> {

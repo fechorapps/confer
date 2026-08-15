@@ -19,6 +19,11 @@ data class MeetingUiState(
     val myDisplayName: String = "",
     val myRole: String = "participant",
     val isLocked: Boolean = false,
+    val isWaitingInLobby: Boolean = false,
+    val waitingRoomMessage: String? = null,
+    val waitingParticipants: List<WaitingParticipant> = emptyList(),
+    val meetingPolicy: MeetingPolicy = MeetingPolicy(),
+    val isWatermarkEnabled: Boolean = false,
     val isMicMuted: Boolean = false,
     val isCameraOff: Boolean = false,
     val isScreenSharing: Boolean = false,
@@ -36,6 +41,7 @@ data class MeetingUiState(
     val showChatSheet: Boolean = false,
     val showRosterSheet: Boolean = false,
     val showPollsSheet: Boolean = false,
+    val showSecuritySheet: Boolean = false,
     val showDiagnostics: Boolean = false,
     val rttMs: Long = 32,
     val packetLossPct: Float = 0.0f
@@ -132,7 +138,42 @@ class MeetingViewModel : ViewModel() {
                         _uiState.update { it.copy(activeReactions = it.activeReactions + reactionItem) }
                     }
                     is ServerMessage.MeetingLocked -> {
-                        _uiState.update { it.copy(isLocked = msg.isLocked) }
+                        _uiState.update { it.copy(isLocked = msg.isLocked, meetingPolicy = it.meetingPolicy.copy(isLocked = msg.isLocked)) }
+                    }
+                    is ServerMessage.WaitingRoomStatus -> {
+                        _uiState.update { it.copy(isWaitingInLobby = msg.isWaiting, waitingRoomMessage = msg.message) }
+                    }
+                    is ServerMessage.ParticipantWaiting -> {
+                        _uiState.update { state ->
+                            if (state.waitingParticipants.none { it.participantId == msg.participant.participantId }) {
+                                state.copy(waitingParticipants = state.waitingParticipants + msg.participant)
+                            } else state
+                        }
+                    }
+                    is ServerMessage.ParticipantAdmitted -> {
+                        _uiState.update { state ->
+                            val stillWaiting = if (msg.participantId == state.myParticipantId) false else state.isWaitingInLobby
+                            state.copy(
+                                isWaitingInLobby = stillWaiting,
+                                waitingParticipants = state.waitingParticipants.filter { it.participantId != msg.participantId }
+                            )
+                        }
+                    }
+                    is ServerMessage.ParticipantRejected -> {
+                        _uiState.update { state ->
+                            state.copy(
+                                waitingParticipants = state.waitingParticipants.filter { it.participantId != msg.participantId }
+                            )
+                        }
+                    }
+                    is ServerMessage.MeetingPolicyChanged -> {
+                        _uiState.update {
+                            it.copy(
+                                isLocked = msg.policy.isLocked,
+                                isWatermarkEnabled = msg.policy.watermarkEnabled,
+                                meetingPolicy = msg.policy
+                            )
+                        }
                     }
                     is ServerMessage.PollCreated -> {
                         _uiState.update { state ->
@@ -350,6 +391,72 @@ class MeetingViewModel : ViewModel() {
 
     fun showDiagnostics(show: Boolean) {
         _uiState.update { it.copy(showDiagnostics = show) }
+    }
+
+    fun showSecurity(show: Boolean) {
+        _uiState.update { it.copy(showSecuritySheet = show) }
+    }
+
+    fun admitParticipant(participantId: String) {
+        _uiState.update { state ->
+            state.copy(waitingParticipants = state.waitingParticipants.filter { it.participantId != participantId })
+        }
+        viewModelScope.launch {
+            signalingClient?.sendMessage(ClientMessage.AdmitParticipant(participantId))
+        }
+    }
+
+    fun admitAllWaiting() {
+        _uiState.update { it.copy(waitingParticipants = emptyList()) }
+        viewModelScope.launch {
+            signalingClient?.sendMessage(ClientMessage.AdmitAll())
+        }
+    }
+
+    fun rejectParticipant(participantId: String) {
+        _uiState.update { state ->
+            state.copy(waitingParticipants = state.waitingParticipants.filter { it.participantId != participantId })
+        }
+        viewModelScope.launch {
+            signalingClient?.sendMessage(ClientMessage.RejectParticipant(participantId))
+        }
+    }
+
+    fun updateMeetingPolicy(policy: MeetingPolicy) {
+        _uiState.update {
+            it.copy(
+                isLocked = policy.isLocked,
+                isWatermarkEnabled = policy.watermarkEnabled,
+                meetingPolicy = policy
+            )
+        }
+        viewModelScope.launch {
+            signalingClient?.sendMessage(ClientMessage.UpdatePolicy(policy))
+        }
+    }
+
+    fun toggleWaitingRoom(enabled: Boolean) {
+        updateMeetingPolicy(_uiState.value.meetingPolicy.copy(waitingRoomEnabled = enabled))
+    }
+
+    fun toggleLockMeeting(locked: Boolean) {
+        updateMeetingPolicy(_uiState.value.meetingPolicy.copy(isLocked = locked))
+    }
+
+    fun toggleAllowScreenShare(allow: Boolean) {
+        updateMeetingPolicy(_uiState.value.meetingPolicy.copy(allowScreenShare = allow))
+    }
+
+    fun toggleAllowChat(allow: Boolean) {
+        updateMeetingPolicy(_uiState.value.meetingPolicy.copy(allowChat = allow))
+    }
+
+    fun toggleAllowUnmute(allow: Boolean) {
+        updateMeetingPolicy(_uiState.value.meetingPolicy.copy(allowUnmute = allow))
+    }
+
+    fun toggleWatermark(enabled: Boolean) {
+        updateMeetingPolicy(_uiState.value.meetingPolicy.copy(watermarkEnabled = enabled))
     }
 
     fun leaveMeeting() {

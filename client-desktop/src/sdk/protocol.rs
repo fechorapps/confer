@@ -130,6 +130,47 @@ pub struct PollDto {
     pub created_at: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MeetingPolicyDto {
+    #[serde(default)]
+    pub is_locked: bool,
+    #[serde(default)]
+    pub waiting_room_enabled: bool,
+    #[serde(default = "default_true")]
+    pub allow_screen_share: bool,
+    #[serde(default = "default_true")]
+    pub allow_chat: bool,
+    #[serde(default = "default_true")]
+    pub allow_unmute: bool,
+    #[serde(default)]
+    pub watermark_enabled: bool,
+}
+
+impl Default for MeetingPolicyDto {
+    fn default() -> Self {
+        Self {
+            is_locked: false,
+            waiting_room_enabled: false,
+            allow_screen_share: true,
+            allow_chat: true,
+            allow_unmute: true,
+            watermark_enabled: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WaitingParticipantDto {
+    pub participant_id: Uuid,
+    #[serde(default)]
+    pub user_id: Uuid,
+    pub display_name: String,
+    #[serde(default)]
+    pub email: Option<String>,
+    #[serde(default)]
+    pub joined_lobby_at: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientMessage {
@@ -179,6 +220,19 @@ pub enum ClientMessage {
         stroke: WhiteboardStrokeDto,
     },
     WhiteboardClear,
+    AdmitParticipant {
+        participant_id: Uuid,
+    },
+    AdmitAll,
+    RejectParticipant {
+        participant_id: Uuid,
+    },
+    UpdatePolicy {
+        policy: MeetingPolicyDto,
+    },
+    ToggleWaitingRoom {
+        enabled: bool,
+    },
     Ping {
         seq: u64,
     },
@@ -243,6 +297,23 @@ pub enum ServerMessage {
     WhiteboardClear,
     MeetingLocked {
         is_locked: bool,
+    },
+    WaitingRoomStatus {
+        is_waiting: bool,
+        #[serde(default)]
+        message: Option<String>,
+    },
+    ParticipantWaiting {
+        participant: WaitingParticipantDto,
+    },
+    ParticipantAdmitted {
+        participant_id: Uuid,
+    },
+    ParticipantRejected {
+        participant_id: Uuid,
+    },
+    MeetingPolicyChanged {
+        policy: MeetingPolicyDto,
     },
     MeetingEnded {
         reason: String,
@@ -429,6 +500,154 @@ mod tests {
         match parsed_clear {
             ServerMessage::WhiteboardClear => {}
             _ => panic!("Expected WhiteboardClear variant"),
+        }
+    }
+
+    #[test]
+    fn test_meeting_policy_dto_defaults_and_serialization() {
+        let default_policy = MeetingPolicyDto::default();
+        assert!(!default_policy.is_locked);
+        assert!(!default_policy.waiting_room_enabled);
+        assert!(default_policy.allow_screen_share);
+        assert!(default_policy.allow_chat);
+        assert!(default_policy.allow_unmute);
+        assert!(!default_policy.watermark_enabled);
+
+        let custom_policy = MeetingPolicyDto {
+            is_locked: true,
+            waiting_room_enabled: true,
+            allow_screen_share: false,
+            allow_chat: false,
+            allow_unmute: false,
+            watermark_enabled: true,
+        };
+
+        let json = serde_json::to_string(&custom_policy).expect("Failed to serialize policy");
+        let parsed: MeetingPolicyDto = serde_json::from_str(&json).expect("Failed to deserialize policy");
+        assert_eq!(parsed, custom_policy);
+
+        // Test partial deserialization defaults
+        let minimal_json = r#"{}"#;
+        let parsed_defaults: MeetingPolicyDto = serde_json::from_str(minimal_json).expect("Failed to deserialize empty policy");
+        assert_eq!(parsed_defaults, default_policy);
+    }
+
+    #[test]
+    fn test_waiting_room_client_messages_serialization() {
+        let part_id = Uuid::new_v4();
+
+        let admit_msg = ClientMessage::AdmitParticipant { participant_id: part_id };
+        let admit_json = serde_json::to_string(&admit_msg).expect("Serialize AdmitParticipant");
+        assert!(admit_json.contains(r#""type":"admit_participant""#));
+        assert!(admit_json.contains(&part_id.to_string()));
+
+        let admit_all_msg = ClientMessage::AdmitAll;
+        let admit_all_json = serde_json::to_string(&admit_all_msg).expect("Serialize AdmitAll");
+        assert_eq!(admit_all_json, r#"{"type":"admit_all"}"#);
+
+        let reject_msg = ClientMessage::RejectParticipant { participant_id: part_id };
+        let reject_json = serde_json::to_string(&reject_msg).expect("Serialize RejectParticipant");
+        assert!(reject_json.contains(r#""type":"reject_participant""#));
+        assert!(reject_json.contains(&part_id.to_string()));
+
+        let policy = MeetingPolicyDto {
+            is_locked: false,
+            waiting_room_enabled: true,
+            allow_screen_share: true,
+            allow_chat: true,
+            allow_unmute: true,
+            watermark_enabled: true,
+        };
+        let update_policy_msg = ClientMessage::UpdatePolicy { policy: policy.clone() };
+        let update_policy_json = serde_json::to_string(&update_policy_msg).expect("Serialize UpdatePolicy");
+        assert!(update_policy_json.contains(r#""type":"update_policy""#));
+        assert!(update_policy_json.contains(r#""watermark_enabled":true"#));
+
+        let toggle_msg = ClientMessage::ToggleWaitingRoom { enabled: true };
+        let toggle_json = serde_json::to_string(&toggle_msg).expect("Serialize ToggleWaitingRoom");
+        assert_eq!(toggle_json, r#"{"type":"toggle_waiting_room","enabled":true}"#);
+    }
+
+    #[test]
+    fn test_waiting_room_server_messages_serialization_and_deserialization() {
+        let part_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+
+        // 1. WaitingRoomStatus
+        let status_msg = ServerMessage::WaitingRoomStatus {
+            is_waiting: true,
+            message: Some("Please wait, host will admit you shortly.".to_string()),
+        };
+        let status_json = serde_json::to_string(&status_msg).expect("Serialize WaitingRoomStatus");
+        let parsed_status: ServerMessage = serde_json::from_str(&status_json).expect("Deserialize WaitingRoomStatus");
+        match parsed_status {
+            ServerMessage::WaitingRoomStatus { is_waiting, message } => {
+                assert!(is_waiting);
+                assert_eq!(message, Some("Please wait, host will admit you shortly.".to_string()));
+            }
+            _ => panic!("Expected WaitingRoomStatus"),
+        }
+
+        // 2. ParticipantWaiting
+        let waiting_dto = WaitingParticipantDto {
+            participant_id: part_id,
+            user_id,
+            display_name: "Bob Observer".to_string(),
+            email: Some("bob@example.com".to_string()),
+            joined_lobby_at: "2026-08-14T20:15:00Z".to_string(),
+        };
+        let waiting_msg = ServerMessage::ParticipantWaiting { participant: waiting_dto.clone() };
+        let waiting_json = serde_json::to_string(&waiting_msg).expect("Serialize ParticipantWaiting");
+        let parsed_waiting: ServerMessage = serde_json::from_str(&waiting_json).expect("Deserialize ParticipantWaiting");
+        match parsed_waiting {
+            ServerMessage::ParticipantWaiting { participant } => {
+                assert_eq!(participant.participant_id, part_id);
+                assert_eq!(participant.display_name, "Bob Observer");
+                assert_eq!(participant.email, Some("bob@example.com".to_string()));
+            }
+            _ => panic!("Expected ParticipantWaiting"),
+        }
+
+        // 3. ParticipantAdmitted
+        let admitted_msg = ServerMessage::ParticipantAdmitted { participant_id: part_id };
+        let admitted_json = serde_json::to_string(&admitted_msg).expect("Serialize ParticipantAdmitted");
+        let parsed_admitted: ServerMessage = serde_json::from_str(&admitted_json).expect("Deserialize ParticipantAdmitted");
+        match parsed_admitted {
+            ServerMessage::ParticipantAdmitted { participant_id } => assert_eq!(participant_id, part_id),
+            _ => panic!("Expected ParticipantAdmitted"),
+        }
+
+        // 4. ParticipantRejected
+        let rejected_msg = ServerMessage::ParticipantRejected { participant_id: part_id };
+        let rejected_json = serde_json::to_string(&rejected_msg).expect("Serialize ParticipantRejected");
+        let parsed_rejected: ServerMessage = serde_json::from_str(&rejected_json).expect("Deserialize ParticipantRejected");
+        match parsed_rejected {
+            ServerMessage::ParticipantRejected { participant_id } => assert_eq!(participant_id, part_id),
+            _ => panic!("Expected ParticipantRejected"),
+        }
+
+        // 5. MeetingPolicyChanged
+        let policy = MeetingPolicyDto {
+            is_locked: true,
+            waiting_room_enabled: true,
+            allow_screen_share: false,
+            allow_chat: true,
+            allow_unmute: false,
+            watermark_enabled: true,
+        };
+        let policy_msg = ServerMessage::MeetingPolicyChanged { policy: policy.clone() };
+        let policy_json = serde_json::to_string(&policy_msg).expect("Serialize MeetingPolicyChanged");
+        let parsed_policy: ServerMessage = serde_json::from_str(&policy_json).expect("Deserialize MeetingPolicyChanged");
+        match parsed_policy {
+            ServerMessage::MeetingPolicyChanged { policy: p } => {
+                assert!(p.is_locked);
+                assert!(p.waiting_room_enabled);
+                assert!(!p.allow_screen_share);
+                assert!(p.allow_chat);
+                assert!(!p.allow_unmute);
+                assert!(p.watermark_enabled);
+            }
+            _ => panic!("Expected MeetingPolicyChanged"),
         }
     }
 }

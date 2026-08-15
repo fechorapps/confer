@@ -1,3 +1,5 @@
+using Confer.Application.DTOs;
+
 namespace Confer.Application.Meetings.Create;
 
 public record CreateMeetingResponse(
@@ -6,5 +8,8 @@ public record CreateMeetingResponse(
     string Title,
     Guid OwnerId,
     int MaxParticipants,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    bool IsWaitingRoomEnabled = false,
+    bool IsWatermarkEnabled = false,
+    MeetingPolicyDto? Policy = null
 );

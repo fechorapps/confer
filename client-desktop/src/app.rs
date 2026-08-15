@@ -9,16 +9,23 @@ use crate::media::filters::VideoFilter;
 use crate::media::{detect_displays, CameraCapturer, DisplayInfo, PickerMode, ScreenCapturer};
 use crate::sdk::client::ConferClient;
 use crate::sdk::protocol::{
-    ChatMessageDto, ClientMessage, ParticipantState, PollDto, PollOptionDto, ServerMessage,
-    WhiteboardColorDto, WhiteboardShapeDto, WhiteboardStrokeDto,
+    ChatMessageDto, ClientMessage, MeetingPolicyDto, ParticipantState, PollDto, PollOptionDto,
+    ServerMessage, WaitingParticipantDto, WhiteboardColorDto, WhiteboardShapeDto,
+    WhiteboardStrokeDto,
 };
 use crate::ui::whiteboard::{WhiteboardTool, WHITEBOARD_COLORS};
-use crate::ui::{lobby, meeting_room};
+use crate::ui::{lobby, meeting_room, waiting_lobby};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ViewState {
     Lobby,
     MeetingRoom,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RosterTab {
+    InMeeting,
+    WaitingRoom,
 }
 
 #[derive(Debug, Clone)]
@@ -38,6 +45,14 @@ pub struct ConferApp {
     pub my_user_id: Option<Uuid>,
     pub my_participant_id: Option<Uuid>,
     pub my_role: String,
+
+    // Waiting Room & Host Security Policies
+    pub is_waiting_in_lobby: bool,
+    pub waiting_room_message: Option<String>,
+    pub waiting_participants: Vec<WaitingParticipantDto>,
+    pub meeting_policy: MeetingPolicyDto,
+    pub is_watermark_enabled: bool,
+    pub roster_tab: RosterTab,
 
     // Lobby Inputs
     pub meeting_title_input: String,
@@ -128,6 +143,13 @@ impl ConferApp {
             my_user_id: None,
             my_participant_id: None,
             my_role: "participant".to_string(),
+
+            is_waiting_in_lobby: false,
+            waiting_room_message: None,
+            waiting_participants: Vec::new(),
+            meeting_policy: MeetingPolicyDto::default(),
+            is_watermark_enabled: false,
+            roster_tab: RosterTab::InMeeting,
 
             meeting_title_input: "Daily Standup".to_string(),
             join_code_input: "".to_string(),
@@ -434,9 +456,62 @@ impl ConferApp {
         });
     }
 
+    pub fn admit_participant(&mut self, participant_id: Uuid) {
+        self.client.send_message(ClientMessage::AdmitParticipant { participant_id });
+        self.waiting_participants.retain(|p| p.participant_id != participant_id);
+    }
+
+    pub fn admit_all_waiting(&mut self) {
+        self.client.send_message(ClientMessage::AdmitAll);
+        self.waiting_participants.clear();
+    }
+
+    pub fn reject_participant(&mut self, participant_id: Uuid) {
+        self.client.send_message(ClientMessage::RejectParticipant { participant_id });
+        self.waiting_participants.retain(|p| p.participant_id != participant_id);
+    }
+
+    pub fn update_meeting_policy(&mut self, policy: MeetingPolicyDto) {
+        self.is_room_locked = policy.is_locked;
+        self.is_watermark_enabled = policy.watermark_enabled;
+        self.meeting_policy = policy.clone();
+        self.client.send_message(ClientMessage::UpdatePolicy { policy });
+    }
+
+    pub fn toggle_waiting_room(&mut self, enabled: bool) {
+        let mut policy = self.meeting_policy.clone();
+        policy.waiting_room_enabled = enabled;
+        self.update_meeting_policy(policy);
+    }
+
     pub fn toggle_room_lock(&mut self) {
-        self.is_room_locked = !self.is_room_locked;
-        // In full flow, dispatches host lock command
+        let mut policy = self.meeting_policy.clone();
+        policy.is_locked = !policy.is_locked;
+        self.update_meeting_policy(policy);
+    }
+
+    pub fn toggle_allow_screen_share(&mut self) {
+        let mut policy = self.meeting_policy.clone();
+        policy.allow_screen_share = !policy.allow_screen_share;
+        self.update_meeting_policy(policy);
+    }
+
+    pub fn toggle_allow_chat(&mut self) {
+        let mut policy = self.meeting_policy.clone();
+        policy.allow_chat = !policy.allow_chat;
+        self.update_meeting_policy(policy);
+    }
+
+    pub fn toggle_allow_unmute(&mut self) {
+        let mut policy = self.meeting_policy.clone();
+        policy.allow_unmute = !policy.allow_unmute;
+        self.update_meeting_policy(policy);
+    }
+
+    pub fn toggle_watermark(&mut self) {
+        let mut policy = self.meeting_policy.clone();
+        policy.watermark_enabled = !policy.watermark_enabled;
+        self.update_meeting_policy(policy);
     }
 
     pub fn toggle_whiteboard(&mut self) {
@@ -588,6 +663,12 @@ impl ConferApp {
 
     pub fn leave_meeting(&mut self) {
         self.view_state = ViewState::Lobby;
+        self.is_waiting_in_lobby = false;
+        self.waiting_room_message = None;
+        self.waiting_participants.clear();
+        self.meeting_policy = MeetingPolicyDto::default();
+        self.is_watermark_enabled = false;
+        self.roster_tab = RosterTab::InMeeting;
         self.roster.clear();
         self.chat_messages.clear();
         self.active_speaker_ids.clear();
@@ -685,6 +766,35 @@ impl ConferApp {
                 }
                 ServerMessage::MeetingLocked { is_locked } => {
                     self.is_room_locked = is_locked;
+                    self.meeting_policy.is_locked = is_locked;
+                }
+                ServerMessage::WaitingRoomStatus { is_waiting, message } => {
+                    self.is_waiting_in_lobby = is_waiting;
+                    self.waiting_room_message = message;
+                }
+                ServerMessage::ParticipantWaiting { participant } => {
+                    if !self.waiting_participants.iter().any(|p| p.participant_id == participant.participant_id) {
+                        self.waiting_participants.push(participant);
+                    }
+                }
+                ServerMessage::ParticipantAdmitted { participant_id } => {
+                    if Some(participant_id) == self.my_participant_id {
+                        self.is_waiting_in_lobby = false;
+                        self.waiting_room_message = None;
+                    }
+                    self.waiting_participants.retain(|p| p.participant_id != participant_id);
+                }
+                ServerMessage::ParticipantRejected { participant_id } => {
+                    if Some(participant_id) == self.my_participant_id {
+                        self.leave_meeting();
+                        self.error_message = Some("The host rejected your request to join the meeting.".to_string());
+                    }
+                    self.waiting_participants.retain(|p| p.participant_id != participant_id);
+                }
+                ServerMessage::MeetingPolicyChanged { policy } => {
+                    self.is_room_locked = policy.is_locked;
+                    self.is_watermark_enabled = policy.watermark_enabled;
+                    self.meeting_policy = policy;
                 }
                 ServerMessage::MeetingEnded { .. } => {
                     self.leave_meeting();
@@ -753,7 +863,13 @@ impl eframe::App for ConferApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             match self.view_state {
                 ViewState::Lobby => lobby::render_lobby(self, ui),
-                ViewState::MeetingRoom => meeting_room::render_meeting_room(self, ui),
+                ViewState::MeetingRoom => {
+                    if self.is_waiting_in_lobby {
+                        waiting_lobby::render_waiting_lobby(self, ui);
+                    } else {
+                        meeting_room::render_meeting_room(self, ui);
+                    }
+                }
             }
         });
     }

@@ -10,5 +10,7 @@ public record JoinMeetingResponse(
     bool IsLocked,
     string WsUrl,
     string RoomToken,
-    List<IceServerConfig> IceServers
+    List<IceServerConfig> IceServers,
+    string Status = "admitted",
+    bool IsWaitingRoom = false
 );

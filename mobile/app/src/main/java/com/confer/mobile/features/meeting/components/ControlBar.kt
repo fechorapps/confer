@@ -26,6 +26,7 @@ fun ControlBar(
     isScreenSharing: Boolean,
     isHandRaised: Boolean,
     isWhiteboardActive: Boolean = false,
+    isHost: Boolean = false,
     unreadChatCount: Int = 0,
     unreadPollCount: Int = 0,
     onToggleMic: () -> Unit,
@@ -38,6 +39,7 @@ fun ControlBar(
     onOpenChat: () -> Unit,
     onOpenPolls: () -> Unit,
     onOpenRoster: () -> Unit,
+    onOpenSecurity: () -> Unit = {},
     onOpenDiagnostics: () -> Unit,
     onLeaveMeeting: () -> Unit,
     modifier: Modifier = Modifier
@@ -190,6 +192,16 @@ fun ControlBar(
                 colors = IconButtonDefaults.iconButtonColors(containerColor = SurfaceVariantDark)
             ) {
                 Icon(Icons.Default.People, contentDescription = "Participants", tint = Color.White)
+            }
+
+            // Host Security Policies
+            if (isHost) {
+                IconButton(
+                    onClick = onOpenSecurity,
+                    colors = IconButtonDefaults.iconButtonColors(containerColor = SurfaceVariantDark)
+                ) {
+                    Icon(Icons.Default.Security, contentDescription = "Security", tint = WarningYellow)
+                }
             }
 
             // Diagnostics HUD

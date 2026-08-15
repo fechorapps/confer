@@ -1,3 +1,4 @@
+using Confer.Domain.Enums;
 using Confer.Domain.Sessions;
 using Confer.Shared.Results;
 
@@ -12,6 +13,9 @@ public sealed class Meeting
     public DateTime? ScheduledStart { get; private set; }
     public int MaxParticipants { get; private set; } = 50;
     public bool IsLocked { get; private set; }
+    public bool IsWaitingRoomEnabled { get; private set; }
+    public bool IsWatermarkEnabled { get; private set; }
+    public MeetingPolicy Policy { get; private set; } = MeetingPolicy.Default;
     public string RecordingMode { get; private set; } = "disabled";
     public bool IsRecording { get; private set; }
     public DateTime? RecordingStartedAt { get; private set; }
@@ -29,7 +33,10 @@ public sealed class Meeting
         string title,
         Guid ownerId,
         int maxParticipants = 50,
-        string? customJoinCode = null)
+        string? customJoinCode = null,
+        bool isWaitingRoomEnabled = false,
+        bool isWatermarkEnabled = false,
+        MeetingPolicy? policy = null)
     {
         if (string.IsNullOrWhiteSpace(title))
             return Result.Failure<Meeting>(Error.Validation("Meeting.TitleEmpty", "Meeting title cannot be empty."));
@@ -49,6 +56,9 @@ public sealed class Meeting
             OwnerId = ownerId,
             MaxParticipants = maxParticipants,
             IsLocked = false,
+            IsWaitingRoomEnabled = isWaitingRoomEnabled,
+            IsWatermarkEnabled = isWatermarkEnabled,
+            Policy = policy ?? MeetingPolicy.Default,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -85,6 +95,97 @@ public sealed class Meeting
 
         IsLocked = false;
         return Result.Success();
+    }
+
+    public Result ToggleWaitingRoom(Guid actorId, bool enabled)
+    {
+        if (actorId != OwnerId)
+            return Result.Failure(MeetingErrors.Unauthorized);
+
+        IsWaitingRoomEnabled = enabled;
+        return Result.Success();
+    }
+
+    public Result ToggleWatermark(Guid actorId, bool enabled)
+    {
+        if (actorId != OwnerId)
+            return Result.Failure(MeetingErrors.Unauthorized);
+
+        IsWatermarkEnabled = enabled;
+        return Result.Success();
+    }
+
+    public Result UpdatePolicy(Guid actorId, MeetingPolicy policy)
+    {
+        if (actorId != OwnerId)
+            return Result.Failure(MeetingErrors.Unauthorized);
+
+        if (policy is null)
+            return Result.Failure(MeetingErrors.InvalidPolicy);
+
+        Policy = policy;
+        return Result.Success();
+    }
+
+    public Result<Participation> AdmitParticipant(Guid actorId, Guid participantId)
+    {
+        if (actorId != OwnerId)
+            return Result.Failure<Participation>(MeetingErrors.Unauthorized);
+
+        var activeSession = Sessions.FirstOrDefault(s => s.EndedAt == null);
+        if (activeSession is null)
+            return Result.Failure<Participation>(SessionErrors.ParticipantNotFound);
+
+        var participation = activeSession.Participations.FirstOrDefault(p => p.Id == participantId);
+        if (participation is null)
+            return Result.Failure<Participation>(SessionErrors.ParticipantNotFound);
+
+        if (participation.Status != ParticipationStatus.InWaitingRoom)
+            return Result.Failure<Participation>(MeetingErrors.ParticipantNotInWaitingRoom);
+
+        participation.Admit();
+        return Result.Success(participation);
+    }
+
+    public Result<List<Participation>> AdmitAll(Guid actorId)
+    {
+        if (actorId != OwnerId)
+            return Result.Failure<List<Participation>>(MeetingErrors.Unauthorized);
+
+        var activeSession = Sessions.FirstOrDefault(s => s.EndedAt == null);
+        if (activeSession is null)
+            return Result.Success(new List<Participation>());
+
+        var waiting = activeSession.Participations
+            .Where(p => p.Status == ParticipationStatus.InWaitingRoom && p.LeftAt == null)
+            .ToList();
+
+        foreach (var p in waiting)
+        {
+            p.Admit();
+        }
+
+        return Result.Success(waiting);
+    }
+
+    public Result<Participation> RejectParticipant(Guid actorId, Guid participantId)
+    {
+        if (actorId != OwnerId)
+            return Result.Failure<Participation>(MeetingErrors.Unauthorized);
+
+        var activeSession = Sessions.FirstOrDefault(s => s.EndedAt == null);
+        if (activeSession is null)
+            return Result.Failure<Participation>(SessionErrors.ParticipantNotFound);
+
+        var participation = activeSession.Participations.FirstOrDefault(p => p.Id == participantId);
+        if (participation is null)
+            return Result.Failure<Participation>(SessionErrors.ParticipantNotFound);
+
+        if (participation.Status != ParticipationStatus.InWaitingRoom)
+            return Result.Failure<Participation>(MeetingErrors.ParticipantNotInWaitingRoom);
+
+        participation.Reject();
+        return Result.Success(participation);
     }
 
     public Result<MeetingRecording> StartRecording(Guid actorId)

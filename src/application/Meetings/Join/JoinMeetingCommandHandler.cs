@@ -40,7 +40,11 @@ public sealed class JoinMeetingCommandHandler(
         }
 
         var role = meeting.OwnerId == command.UserId ? ParticipantRole.Host : ParticipantRole.Participant;
-        var participationResult = session.AddParticipant(command.UserId, command.DisplayName, role, command.ClientInfo);
+        var status = (meeting.IsWaitingRoomEnabled && role != ParticipantRole.Host)
+            ? ParticipationStatus.InWaitingRoom
+            : ParticipationStatus.Admitted;
+
+        var participationResult = session.AddParticipant(command.UserId, command.DisplayName, role, command.ClientInfo, status);
         if (participationResult.IsFailure)
             return Result.Failure<JoinMeetingResponse>(participationResult.Error);
 
@@ -65,6 +69,7 @@ public sealed class JoinMeetingCommandHandler(
             new(["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"])
         };
 
+        var isWaiting = status == ParticipationStatus.InWaitingRoom;
         return Result.Success(new JoinMeetingResponse(
             meeting.Id,
             meeting.Title,
@@ -73,7 +78,9 @@ public sealed class JoinMeetingCommandHandler(
             meeting.IsLocked,
             "/v1/signal",
             roomToken,
-            iceServers
+            iceServers,
+            status.ToString().ToLowerInvariant(),
+            isWaiting
         ));
     }
 }

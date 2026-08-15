@@ -5,6 +5,11 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Confer.Application.DTOs;
 using Confer.Application.Interfaces;
+using Confer.Application.Meetings.Governance.AdmitAll;
+using Confer.Application.Meetings.Governance.AdmitParticipant;
+using Confer.Application.Meetings.Governance.RejectParticipant;
+using Confer.Application.Meetings.Governance.ToggleWaitingRoom;
+using Confer.Application.Meetings.Governance.UpdatePolicy;
 using Confer.Domain.Enums;
 using Confer.Shared.Application.Interfaces;
 using Microsoft.AspNetCore.Http;
@@ -187,11 +192,79 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
                     await BroadcastReactionAsync(claims.MeetingId, claims.ParticipantId, claims.DisplayName, emoji);
                     break;
 
+                case "admit_participant":
+                    if (claims.Role == ParticipantRole.Host || claims.Role == ParticipantRole.CoHost)
+                    {
+                        var targetIdStr = node["target_participant_id"]?.GetValue<string>() ?? node["participant_id"]?.GetValue<string>();
+                        if (Guid.TryParse(targetIdStr, out var targetId))
+                        {
+                            using var scope = _serviceProvider.CreateScope();
+                            var dispatcher = scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
+                            await dispatcher.SendAsync(new AdmitParticipantCommand(claims.MeetingId, claims.UserId, targetId));
+                        }
+                    }
+                    break;
+
+                case "admit_all":
+                    if (claims.Role == ParticipantRole.Host || claims.Role == ParticipantRole.CoHost)
+                    {
+                        using var scope = _serviceProvider.CreateScope();
+                        var dispatcher = scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
+                        await dispatcher.SendAsync(new AdmitAllCommand(claims.MeetingId, claims.UserId));
+                    }
+                    break;
+
+                case "reject_participant":
+                    if (claims.Role == ParticipantRole.Host || claims.Role == ParticipantRole.CoHost)
+                    {
+                        var targetIdStr = node["target_participant_id"]?.GetValue<string>() ?? node["participant_id"]?.GetValue<string>();
+                        if (Guid.TryParse(targetIdStr, out var targetId))
+                        {
+                            using var scope = _serviceProvider.CreateScope();
+                            var dispatcher = scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
+                            await dispatcher.SendAsync(new RejectParticipantCommand(claims.MeetingId, claims.UserId, targetId));
+                            if (_roomSockets.TryGetValue(claims.MeetingId, out var sockets) && sockets.TryGetValue(targetId, out var targetSocket))
+                            {
+                                await targetSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Rejected from waiting room", CancellationToken.None);
+                            }
+                        }
+                    }
+                    break;
+
+                case "update_policy":
+                    if (claims.Role == ParticipantRole.Host || claims.Role == ParticipantRole.CoHost)
+                    {
+                        var policyNode = node["policy"];
+                        var allowScreenShare = policyNode?["allow_screen_share"]?.GetValue<bool>() ?? true;
+                        var allowChat = policyNode?["allow_chat"]?.GetValue<bool>() ?? true;
+                        var allowUnmuteSelf = policyNode?["allow_unmute_self"]?.GetValue<bool>() ?? true;
+                        var muteOnEntry = policyNode?["mute_on_entry"]?.GetValue<bool>() ?? false;
+                        var allowRename = policyNode?["allow_rename"]?.GetValue<bool>() ?? true;
+                        var isWatermark = node["is_watermark_enabled"]?.GetValue<bool>();
+                        var isWaitingRoom = node["is_waiting_room_enabled"]?.GetValue<bool>();
+
+                        var policyDto = new MeetingPolicyDto(allowScreenShare, allowChat, allowUnmuteSelf, muteOnEntry, allowRename);
+                        using var scope = _serviceProvider.CreateScope();
+                        var dispatcher = scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
+                        await dispatcher.SendAsync(new UpdateMeetingPolicyCommand(claims.MeetingId, claims.UserId, policyDto, isWatermark, isWaitingRoom));
+                    }
+                    break;
+
+                case "toggle_waiting_room":
+                    if (claims.Role == ParticipantRole.Host || claims.Role == ParticipantRole.CoHost)
+                    {
+                        var enabled = node["enabled"]?.GetValue<bool>() ?? true;
+                        using var scope = _serviceProvider.CreateScope();
+                        var dispatcher = scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
+                        await dispatcher.SendAsync(new ToggleWaitingRoomCommand(claims.MeetingId, claims.UserId, enabled));
+                    }
+                    break;
+
                 case "host_action":
                     if (claims.Role == ParticipantRole.Host || claims.Role == ParticipantRole.CoHost)
                     {
                         var action = node["action"]?.GetValue<string>()?.ToLowerInvariant();
-                        var targetIdStr = node["target_participant_id"]?.GetValue<string>();
+                        var targetIdStr = node["target_participant_id"]?.GetValue<string>() ?? node["participant_id"]?.GetValue<string>();
                         if (Guid.TryParse(targetIdStr, out var targetId))
                         {
                             if (action == "mute")
@@ -206,6 +279,28 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
                                     await targetSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Kicked by host", CancellationToken.None);
                                 }
                             }
+                            else if (action == "admit")
+                            {
+                                using var scope = _serviceProvider.CreateScope();
+                                var dispatcher = scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
+                                await dispatcher.SendAsync(new AdmitParticipantCommand(claims.MeetingId, claims.UserId, targetId));
+                            }
+                            else if (action == "reject")
+                            {
+                                using var scope = _serviceProvider.CreateScope();
+                                var dispatcher = scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
+                                await dispatcher.SendAsync(new RejectParticipantCommand(claims.MeetingId, claims.UserId, targetId));
+                                if (_roomSockets.TryGetValue(claims.MeetingId, out var sockets) && sockets.TryGetValue(targetId, out var targetSocket))
+                                {
+                                    await targetSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Rejected by host", CancellationToken.None);
+                                }
+                            }
+                        }
+                        else if (action == "admit_all")
+                        {
+                            using var scope = _serviceProvider.CreateScope();
+                            var dispatcher = scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
+                            await dispatcher.SendAsync(new AdmitAllCommand(claims.MeetingId, claims.UserId));
                         }
                     }
                     break;
@@ -352,6 +447,30 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
         }
         return Task.CompletedTask;
     }
+
+    public Task BroadcastWaitingRoomUpdateAsync(Guid meetingId, bool isWaitingRoomEnabled, int waitingCount) =>
+        BroadcastToRoomAsync(meetingId, new JsonObject
+        {
+            ["type"] = "waiting_room_update",
+            ["is_waiting_room_enabled"] = isWaitingRoomEnabled,
+            ["waiting_count"] = waitingCount
+        });
+
+    public Task BroadcastPolicyChangedAsync(Guid meetingId, MeetingPolicyDto policy, bool isWatermarkEnabled = false, bool isWaitingRoomEnabled = false) =>
+        BroadcastToRoomAsync(meetingId, new JsonObject
+        {
+            ["type"] = "policy_changed",
+            ["policy"] = JsonSerializer.SerializeToNode(policy),
+            ["is_watermark_enabled"] = isWatermarkEnabled,
+            ["is_waiting_room_enabled"] = isWaitingRoomEnabled
+        });
+
+    public Task BroadcastParticipantAdmittedAsync(Guid meetingId, Guid participantId) =>
+        BroadcastToRoomAsync(meetingId, new JsonObject
+        {
+            ["type"] = "participant_admitted",
+            ["participant_id"] = participantId.ToString()
+        });
 
     private async Task BroadcastToRoomAsync(Guid meetingId, JsonObject json, Guid? excludeParticipantId = null)
     {

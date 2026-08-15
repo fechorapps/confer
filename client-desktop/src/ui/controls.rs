@@ -2,6 +2,8 @@ use egui::{Color32, RichText, Stroke, Ui};
 use crate::app::ConferApp;
 
 pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
+    let is_host = app.my_role == "host";
+
     ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
         ui.add_space(14.0);
 
@@ -15,7 +17,7 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 8.0;
 
-                    // Mic Toggle
+                    // Mic Toggle (Respect host policy if non-host)
                     let mic_bg = if app.is_mic_muted { Color32::from_rgb(225, 29, 72) } else { Color32::from_rgb(26, 29, 33) };
                     let mic_text = if app.is_mic_muted { "🔇 Unmute" } else { "🎙 Mute" };
                     if ui.add(egui::Button::new(RichText::new(mic_text).size(12.0).color(Color32::WHITE)).fill(mic_bg).rounding(18.0)).clicked() {
@@ -70,6 +72,60 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                     let polls_bg = if app.show_polls { Color32::from_rgb(2, 132, 199) } else { Color32::from_rgb(26, 29, 33) };
                     if ui.add(egui::Button::new(RichText::new("📊 Polls").size(12.0).color(Color32::WHITE)).fill(polls_bg).rounding(18.0)).clicked() {
                         app.toggle_polls();
+                    }
+
+                    // Host Security Policy Menu Popup (🛡)
+                    if is_host {
+                        let sec_active = app.meeting_policy.is_locked || app.meeting_policy.waiting_room_enabled;
+                        let sec_color = if sec_active { Color32::from_rgb(251, 191, 36) } else { Color32::WHITE };
+
+                        ui.menu_button(RichText::new("🛡 Security").size(12.0).color(sec_color), |ui| {
+                            ui.set_min_width(220.0);
+                            ui.label(RichText::new("Host Security Policies").size(12.0).strong().color(Color32::from_rgb(56, 189, 248)));
+                            ui.separator();
+
+                            // Lock Meeting Toggle
+                            let lock_label = if app.meeting_policy.is_locked { "✓ 🔒 Lock Meeting (Active)" } else { "   🔒 Lock Meeting" };
+                            if ui.selectable_label(app.meeting_policy.is_locked, lock_label).clicked() {
+                                app.toggle_room_lock();
+                            }
+
+                            // Waiting Room Toggle
+                            let wr_label = if app.meeting_policy.waiting_room_enabled { "✓ ⏳ Enable Waiting Room" } else { "   ⏳ Enable Waiting Room" };
+                            if ui.selectable_label(app.meeting_policy.waiting_room_enabled, wr_label).clicked() {
+                                app.toggle_waiting_room(!app.meeting_policy.waiting_room_enabled);
+                            }
+
+                            ui.separator();
+                            ui.label(RichText::new("Participant Permissions").size(10.0).strong().color(Color32::from_rgb(148, 163, 184)));
+
+                            // Allow Screen Share
+                            let ss_label = if app.meeting_policy.allow_screen_share { "✓ 🖥 Allow Screen Share" } else { "   🖥 Allow Screen Share" };
+                            if ui.selectable_label(app.meeting_policy.allow_screen_share, ss_label).clicked() {
+                                app.toggle_allow_screen_share();
+                            }
+
+                            // Allow Chat
+                            let chat_label = if app.meeting_policy.allow_chat { "✓ 💬 Allow Chat" } else { "   💬 Allow Chat" };
+                            if ui.selectable_label(app.meeting_policy.allow_chat, chat_label).clicked() {
+                                app.toggle_allow_chat();
+                            }
+
+                            // Allow Unmute
+                            let unmute_label = if app.meeting_policy.allow_unmute { "✓ 🎙 Allow Participants to Unmute" } else { "   🎙 Allow Participants to Unmute" };
+                            if ui.selectable_label(app.meeting_policy.allow_unmute, unmute_label).clicked() {
+                                app.toggle_allow_unmute();
+                            }
+
+                            ui.separator();
+                            ui.label(RichText::new("Data Loss Prevention").size(10.0).strong().color(Color32::from_rgb(148, 163, 184)));
+
+                            // Visual Watermark Toggle
+                            let wm_label = if app.meeting_policy.watermark_enabled { "✓ 🏷 Visual Watermark" } else { "   🏷 Visual Watermark" };
+                            if ui.selectable_label(app.meeting_policy.watermark_enabled, wm_label).clicked() {
+                                app.toggle_watermark();
+                            }
+                        });
                     }
 
                     // Filters Dropdown

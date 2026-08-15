@@ -13,4 +13,7 @@ public static class MeetingErrors
     public static readonly Error AlreadyRecording = Error.Conflict("Meeting.AlreadyRecording", "The meeting is already being recorded.");
     public static readonly Error NotRecording = Error.Conflict("Meeting.NotRecording", "The meeting is not currently being recorded.");
     public static readonly Error RecordingNotFound = Error.NotFound("Meeting.RecordingNotFound", "The meeting recording was not found.");
+    public static readonly Error ParticipantNotInWaitingRoom = Error.Conflict("Meeting.ParticipantNotInWaitingRoom", "The participant is not in the waiting room.");
+    public static readonly Error WaitingRoomDisabled = Error.Conflict("Meeting.WaitingRoomDisabled", "Waiting room is not enabled for this meeting.");
+    public static readonly Error InvalidPolicy = Error.Validation("Meeting.InvalidPolicy", "Meeting policy cannot be null or invalid.");
 }

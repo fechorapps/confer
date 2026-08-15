@@ -7,6 +7,13 @@ public enum ParticipantRole
     Participant = 3
 }
 
+public enum ParticipationStatus
+{
+    Admitted = 1,
+    InWaitingRoom = 2,
+    Rejected = 3
+}
+
 public enum MediaKind
 {
     Audio = 1,

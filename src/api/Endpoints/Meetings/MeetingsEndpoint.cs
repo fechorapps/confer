@@ -1,8 +1,16 @@
+using Confer.Application.DTOs;
 using Confer.Application.Meetings.Breakouts.CloseBreakouts;
 using Confer.Application.Meetings.Breakouts.CreateBreakouts;
 using Confer.Application.Meetings.Create;
 using Confer.Application.Meetings.GetByCode;
 using Confer.Application.Meetings.GetRecordings;
+using Confer.Application.Meetings.Governance.AdmitAll;
+using Confer.Application.Meetings.Governance.AdmitParticipant;
+using Confer.Application.Meetings.Governance.GetPolicy;
+using Confer.Application.Meetings.Governance.GetWaitingRoom;
+using Confer.Application.Meetings.Governance.RejectParticipant;
+using Confer.Application.Meetings.Governance.ToggleWaitingRoom;
+using Confer.Application.Meetings.Governance.UpdatePolicy;
 using Confer.Application.Meetings.Join;
 using Confer.Application.Meetings.Lock;
 using Confer.Application.Meetings.Polls.ClosePoll;
@@ -46,9 +54,26 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
         // Breakout Rooms
         group.MapPost("/{id:guid}/breakouts", CreateBreakouts).WithName("CreateBreakouts");
         group.MapPost("/{id:guid}/breakouts/close", CloseBreakouts).WithName("CloseBreakouts");
+
+        // Waiting Room & Governance
+        group.MapPost("/{id:guid}/waiting-room/toggle", ToggleWaitingRoom).WithName("ToggleWaitingRoom");
+        group.MapPost("/{id:guid}/waiting-room/admit", AdmitParticipant).WithName("AdmitParticipant");
+        group.MapPost("/{id:guid}/waiting-room/admit-all", AdmitAllParticipants).WithName("AdmitAllParticipants");
+        group.MapPost("/{id:guid}/waiting-room/reject", RejectParticipant).WithName("RejectParticipant");
+        group.MapGet("/{id:guid}/waiting-room", GetWaitingRoom).WithName("GetWaitingRoom");
+        group.MapPost("/{id:guid}/policies", UpdateMeetingPolicy).WithName("UpdateMeetingPolicy");
+        group.MapGet("/{id:guid}/policies", GetMeetingPolicy).WithName("GetMeetingPolicy");
     }
 
-    public record CreateMeetingRequest(string Title, Guid OwnerId, int MaxParticipants = 50, string? CustomJoinCode = null);
+    public record CreateMeetingRequest(
+        string Title,
+        Guid OwnerId,
+        int MaxParticipants = 50,
+        string? CustomJoinCode = null,
+        bool IsWaitingRoomEnabled = false,
+        bool IsWatermarkEnabled = false,
+        MeetingPolicyDto? Policy = null
+    );
     public record JoinMeetingRequest(Guid UserId, string DisplayName, string? ClientInfo = null);
     public record LockMeetingRequest(Guid ActorId, bool Lock);
     public record StartRecordingRequest(Guid ActorId);
@@ -58,6 +83,16 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
     public record ClosePollRequest(Guid ActorId);
     public record CreateBreakoutsRequest(Guid ActorId, int RoomCount, int MaxDurationMinutes = 15, List<string>? RoomNames = null, List<Confer.Application.DTOs.BreakoutAssignmentDto>? Assignments = null);
     public record CloseBreakoutsRequest(Guid ActorId);
+    public record ToggleWaitingRoomRequest(Guid ActorId, bool Enabled);
+    public record AdmitParticipantRequest(Guid ActorId, Guid ParticipantId);
+    public record AdmitAllRequest(Guid ActorId);
+    public record RejectParticipantRequest(Guid ActorId, Guid ParticipantId);
+    public record UpdateMeetingPolicyRequest(
+        Guid ActorId,
+        MeetingPolicyDto Policy,
+        bool? IsWatermarkEnabled = null,
+        bool? IsWaitingRoomEnabled = null
+    );
 
     public record CreateMeetingResponse
     {
@@ -67,6 +102,9 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
         public Guid OwnerId { get; init; }
         public int MaxParticipants { get; init; }
         public DateTime CreatedAt { get; init; }
+        public bool IsWaitingRoomEnabled { get; init; }
+        public bool IsWatermarkEnabled { get; init; }
+        public MeetingPolicyDto? Policy { get; init; }
     }
 
     public record JoinMeetingResponse
@@ -79,6 +117,8 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
         public string WsUrl { get; init; } = string.Empty;
         public string RoomToken { get; init; } = string.Empty;
         public List<Confer.Application.DTOs.IceServerConfig> IceServers { get; init; } = new();
+        public string Status { get; init; } = "admitted";
+        public bool IsWaitingRoom { get; init; }
     }
 
     private static async Task<IResult> CreateMeeting(
@@ -86,7 +126,14 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
         [FromServices] ICqrsDispatcher dispatcher,
         CancellationToken ct)
     {
-        var command = new CreateMeetingCommand(request.Title, request.OwnerId, request.MaxParticipants, request.CustomJoinCode);
+        var command = new CreateMeetingCommand(
+            request.Title,
+            request.OwnerId,
+            request.MaxParticipants,
+            request.CustomJoinCode,
+            request.IsWaitingRoomEnabled,
+            request.IsWatermarkEnabled,
+            request.Policy);
         var result = await dispatcher.SendAsync(command, ct);
         return result.IsSuccess
             ? TypedResults.Created($"/api/meetings/{result.Value.JoinCode}", result.Value)
@@ -224,6 +271,82 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
         var command = new CloseBreakoutsCommand(id, request.ActorId);
         var result = await dispatcher.SendAsync(command, ct);
         return NoContentOrFailure(result);
+    }
+
+    private static async Task<IResult> ToggleWaitingRoom(
+        Guid id,
+        [FromBody] ToggleWaitingRoomRequest request,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var command = new ToggleWaitingRoomCommand(id, request.ActorId, request.Enabled);
+        var result = await dispatcher.SendAsync(command, ct);
+        return OkOrFailure(result);
+    }
+
+    private static async Task<IResult> AdmitParticipant(
+        Guid id,
+        [FromBody] AdmitParticipantRequest request,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var command = new AdmitParticipantCommand(id, request.ActorId, request.ParticipantId);
+        var result = await dispatcher.SendAsync(command, ct);
+        return NoContentOrFailure(result);
+    }
+
+    private static async Task<IResult> AdmitAllParticipants(
+        Guid id,
+        [FromBody] AdmitAllRequest request,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var command = new AdmitAllCommand(id, request.ActorId);
+        var result = await dispatcher.SendAsync(command, ct);
+        return OkOrFailure(result);
+    }
+
+    private static async Task<IResult> RejectParticipant(
+        Guid id,
+        [FromBody] RejectParticipantRequest request,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var command = new RejectParticipantCommand(id, request.ActorId, request.ParticipantId);
+        var result = await dispatcher.SendAsync(command, ct);
+        return NoContentOrFailure(result);
+    }
+
+    private static async Task<IResult> GetWaitingRoom(
+        Guid id,
+        [FromQuery] Guid? actorId,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var query = new GetWaitingRoomQuery(id, actorId);
+        var result = await dispatcher.QueryAsync(query, ct);
+        return OkOrFailure(result);
+    }
+
+    private static async Task<IResult> UpdateMeetingPolicy(
+        Guid id,
+        [FromBody] UpdateMeetingPolicyRequest request,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var command = new UpdateMeetingPolicyCommand(id, request.ActorId, request.Policy, request.IsWatermarkEnabled, request.IsWaitingRoomEnabled);
+        var result = await dispatcher.SendAsync(command, ct);
+        return OkOrFailure(result);
+    }
+
+    private static async Task<IResult> GetMeetingPolicy(
+        Guid id,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var query = new GetMeetingPolicyQuery(id);
+        var result = await dispatcher.QueryAsync(query, ct);
+        return OkOrFailure(result);
     }
 
     private static IResult HandleFailure(Confer.Shared.Results.Error error) =>

@@ -35,6 +35,16 @@ using (var scope = app.Services.CreateScope())
 
     if (db.Database.IsSqlite())
     {
+        try { await db.Database.ExecuteSqlRawAsync(@"ALTER TABLE ""meetings"" ADD COLUMN ""IsWaitingRoomEnabled"" INTEGER NOT NULL DEFAULT 0;"); } catch { }
+        try { await db.Database.ExecuteSqlRawAsync(@"ALTER TABLE ""meetings"" ADD COLUMN ""IsWatermarkEnabled"" INTEGER NOT NULL DEFAULT 0;"); } catch { }
+        try { await db.Database.ExecuteSqlRawAsync(@"ALTER TABLE ""meetings"" ADD COLUMN ""Policy_AllowScreenShare"" INTEGER NOT NULL DEFAULT 1;"); } catch { }
+        try { await db.Database.ExecuteSqlRawAsync(@"ALTER TABLE ""meetings"" ADD COLUMN ""Policy_AllowChat"" INTEGER NOT NULL DEFAULT 1;"); } catch { }
+        try { await db.Database.ExecuteSqlRawAsync(@"ALTER TABLE ""meetings"" ADD COLUMN ""Policy_AllowUnmuteSelf"" INTEGER NOT NULL DEFAULT 1;"); } catch { }
+        try { await db.Database.ExecuteSqlRawAsync(@"ALTER TABLE ""meetings"" ADD COLUMN ""Policy_MuteOnEntry"" INTEGER NOT NULL DEFAULT 0;"); } catch { }
+        try { await db.Database.ExecuteSqlRawAsync(@"ALTER TABLE ""meetings"" ADD COLUMN ""Policy_AllowRename"" INTEGER NOT NULL DEFAULT 1;"); } catch { }
+        try { await db.Database.ExecuteSqlRawAsync(@"ALTER TABLE ""participations"" ADD COLUMN ""Status"" TEXT NOT NULL DEFAULT 'Admitted';"); } catch { }
+        try { await db.Database.ExecuteSqlRawAsync(@"ALTER TABLE ""participations"" ADD COLUMN ""AdmittedAt"" TEXT NULL;"); } catch { }
+
         await db.Database.ExecuteSqlRawAsync(@"
             CREATE TABLE IF NOT EXISTS ""polls"" (
                 ""Id"" TEXT NOT NULL PRIMARY KEY,

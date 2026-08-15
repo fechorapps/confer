@@ -28,146 +28,190 @@ fun MeetingScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
-    Scaffold(
-        containerColor = BackgroundDark,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = state.title,
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        if (state.isLocked) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Icon(Icons.Default.Lock, contentDescription = "Locked", tint = WarningYellow, modifier = Modifier.size(14.dp))
+    if (state.isWaitingInLobby) {
+        WaitingLobbyView(
+            title = state.title,
+            myDisplayName = state.myDisplayName,
+            waitingRoomMessage = state.waitingRoomMessage,
+            isMicMuted = state.isMicMuted,
+            isCameraOff = state.isCameraOff,
+            onLeaveMeeting = {
+                viewModel.leaveMeeting()
+                onLeaveMeeting()
+            }
+        )
+    } else {
+        Scaffold(
+            containerColor = BackgroundDark,
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = state.title,
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (state.isLocked) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Icon(Icons.Default.Lock, contentDescription = "Locked", tint = WarningYellow, modifier = Modifier.size(14.dp))
+                            }
                         }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = SurfaceDark)
-            )
-        }
-    ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            // Main Responsive Video Grid
-            VideoGrid(
-                myDisplayName = state.myDisplayName,
-                myRole = state.myRole,
-                isLocalMicMuted = state.isMicMuted,
-                isLocalCameraOff = state.isCameraOff,
-                isLocalScreenSharing = state.isScreenSharing,
-                isLocalHandRaised = state.isHandRaised,
-                roster = state.roster,
-                activeSpeakerIds = state.activeSpeakerIds,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = 80.dp)
-            )
-
-            // Floating Emoji Reaction Stream
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = SurfaceDark)
+                )
+            }
+        ) { padding ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(bottom = 100.dp),
-                contentAlignment = Alignment.BottomCenter
+                    .padding(padding)
             ) {
-                state.activeReactions.takeLast(4).forEach { reaction ->
-                    Text(
-                        text = reaction.emoji,
-                        fontSize = 32.sp,
-                        modifier = Modifier.padding(bottom = 20.dp)
-                    )
-                }
-            }
-
-            // Bottom Floating Control Bar
-            ControlBar(
-                isMicMuted = state.isMicMuted,
-                isCameraOff = state.isCameraOff,
-                isScreenSharing = state.isScreenSharing,
-                isHandRaised = state.isHandRaised,
-                isWhiteboardActive = state.isWhiteboardActive,
-                unreadChatCount = state.unreadChatCount,
-                unreadPollCount = state.unreadPollCount,
-                onToggleMic = { viewModel.toggleMic() },
-                onToggleCamera = { viewModel.toggleCamera() },
-                onFlipCamera = { viewModel.flipCamera() },
-                onToggleScreenShare = { viewModel.toggleScreenShare() },
-                onToggleWhiteboard = { viewModel.toggleWhiteboard() },
-                onToggleHandRaise = { viewModel.toggleHandRaise() },
-                onSendReaction = { viewModel.sendReaction(it) },
-                onOpenChat = { viewModel.showChat(true) },
-                onOpenPolls = { viewModel.showPolls(true) },
-                onOpenRoster = { viewModel.showRoster(true) },
-                onOpenDiagnostics = { viewModel.showDiagnostics(true) },
-                onLeaveMeeting = {
-                    viewModel.leaveMeeting()
-                    onLeaveMeeting()
-                },
-                modifier = Modifier.align(Alignment.BottomCenter)
-            )
-
-            // Collaborative Whiteboard Overlay
-            if (state.isWhiteboardActive) {
-                WhiteboardCanvas(
-                    strokes = state.whiteboardStrokes,
-                    myParticipantId = state.myParticipantId,
-                    onDrawStroke = { viewModel.sendWhiteboardStroke(it) },
-                    onUndo = { viewModel.undoWhiteboard() },
-                    onClear = { viewModel.clearWhiteboard() },
-                    onClose = { viewModel.showWhiteboard(false) },
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-
-            // Chat Bottom Sheet
-            if (state.showChatSheet) {
-                ChatBottomSheet(
-                    messages = state.chatMessages,
-                    myParticipantId = state.myParticipantId,
-                    onSendMessage = { viewModel.sendChat(it) },
-                    onDismiss = { viewModel.showChat(false) }
-                )
-            }
-
-            // Polls Bottom Sheet
-            if (state.showPollsSheet) {
-                PollsBottomSheet(
-                    polls = state.polls,
-                    myParticipantId = state.myParticipantId,
-                    isHost = state.myRole == "host",
-                    onCreatePoll = { question, options -> viewModel.createPoll(question, options) },
-                    onVote = { pollId, optionId -> viewModel.votePoll(pollId, optionId) },
-                    onEndPoll = { pollId -> viewModel.endPoll(pollId) },
-                    onDismiss = { viewModel.showPolls(false) }
-                )
-            }
-
-            // Participant Roster Bottom Sheet
-            if (state.showRosterSheet) {
-                RosterBottomSheet(
+                // Main Responsive Video Grid
+                VideoGrid(
                     myDisplayName = state.myDisplayName,
                     myRole = state.myRole,
+                    isLocalMicMuted = state.isMicMuted,
+                    isLocalCameraOff = state.isCameraOff,
+                    isLocalScreenSharing = state.isScreenSharing,
+                    isLocalHandRaised = state.isHandRaised,
                     roster = state.roster,
-                    onHostMute = { viewModel.hostMute(it) },
-                    onHostKick = { viewModel.hostKick(it) },
-                    onDismiss = { viewModel.showRoster(false) }
+                    activeSpeakerIds = state.activeSpeakerIds,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 80.dp)
                 )
-            }
 
-            // Diagnostics HUD Dialog
-            if (state.showDiagnostics) {
-                DiagnosticsDialog(
-                    rttMs = state.rttMs,
-                    packetLossPct = state.packetLossPct,
-                    onDismiss = { viewModel.showDiagnostics(false) }
+                // Visual Watermark Overlay
+                if (state.isWatermarkEnabled || state.meetingPolicy.watermarkEnabled) {
+                    WatermarkOverlay(
+                        displayName = state.myDisplayName,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(bottom = 80.dp)
+                    )
+                }
+
+                // Floating Emoji Reaction Stream
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 100.dp),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    state.activeReactions.takeLast(4).forEach { reaction ->
+                        Text(
+                            text = reaction.emoji,
+                            fontSize = 32.sp,
+                            modifier = Modifier.padding(bottom = 20.dp)
+                        )
+                    }
+                }
+
+                // Bottom Floating Control Bar
+                ControlBar(
+                    isMicMuted = state.isMicMuted,
+                    isCameraOff = state.isCameraOff,
+                    isScreenSharing = state.isScreenSharing,
+                    isHandRaised = state.isHandRaised,
+                    isWhiteboardActive = state.isWhiteboardActive,
+                    isHost = state.myRole == "host",
+                    unreadChatCount = state.unreadChatCount,
+                    unreadPollCount = state.unreadPollCount,
+                    onToggleMic = { viewModel.toggleMic() },
+                    onToggleCamera = { viewModel.toggleCamera() },
+                    onFlipCamera = { viewModel.flipCamera() },
+                    onToggleScreenShare = { viewModel.toggleScreenShare() },
+                    onToggleWhiteboard = { viewModel.toggleWhiteboard() },
+                    onToggleHandRaise = { viewModel.toggleHandRaise() },
+                    onSendReaction = { viewModel.sendReaction(it) },
+                    onOpenChat = { viewModel.showChat(true) },
+                    onOpenPolls = { viewModel.showPolls(true) },
+                    onOpenRoster = { viewModel.showRoster(true) },
+                    onOpenSecurity = { viewModel.showSecurity(true) },
+                    onOpenDiagnostics = { viewModel.showDiagnostics(true) },
+                    onLeaveMeeting = {
+                        viewModel.leaveMeeting()
+                        onLeaveMeeting()
+                    },
+                    modifier = Modifier.align(Alignment.BottomCenter)
                 )
+
+                // Collaborative Whiteboard Overlay
+                if (state.isWhiteboardActive) {
+                    WhiteboardCanvas(
+                        strokes = state.whiteboardStrokes,
+                        myParticipantId = state.myParticipantId,
+                        onDrawStroke = { viewModel.sendWhiteboardStroke(it) },
+                        onUndo = { viewModel.undoWhiteboard() },
+                        onClear = { viewModel.clearWhiteboard() },
+                        onClose = { viewModel.showWhiteboard(false) },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                // Chat Bottom Sheet
+                if (state.showChatSheet) {
+                    ChatBottomSheet(
+                        messages = state.chatMessages,
+                        myParticipantId = state.myParticipantId,
+                        onSendMessage = { viewModel.sendChat(it) },
+                        onDismiss = { viewModel.showChat(false) }
+                    )
+                }
+
+                // Polls Bottom Sheet
+                if (state.showPollsSheet) {
+                    PollsBottomSheet(
+                        polls = state.polls,
+                        myParticipantId = state.myParticipantId,
+                        isHost = state.myRole == "host",
+                        onCreatePoll = { question, options -> viewModel.createPoll(question, options) },
+                        onVote = { pollId, optionId -> viewModel.votePoll(pollId, optionId) },
+                        onEndPoll = { pollId -> viewModel.endPoll(pollId) },
+                        onDismiss = { viewModel.showPolls(false) }
+                    )
+                }
+
+                // Participant Roster Bottom Sheet
+                if (state.showRosterSheet) {
+                    RosterBottomSheet(
+                        myDisplayName = state.myDisplayName,
+                        myRole = state.myRole,
+                        roster = state.roster,
+                        waitingParticipants = state.waitingParticipants,
+                        onHostMute = { viewModel.hostMute(it) },
+                        onHostKick = { viewModel.hostKick(it) },
+                        onHostAdmit = { viewModel.admitParticipant(it) },
+                        onHostAdmitAll = { viewModel.admitAllWaiting() },
+                        onHostReject = { viewModel.rejectParticipant(it) },
+                        onDismiss = { viewModel.showRoster(false) }
+                    )
+                }
+
+                // Host Security Policies Bottom Sheet
+                if (state.showSecuritySheet) {
+                    SecurityBottomSheet(
+                        policy = state.meetingPolicy,
+                        onToggleLock = { viewModel.toggleLockMeeting(it) },
+                        onToggleWaitingRoom = { viewModel.toggleWaitingRoom(it) },
+                        onToggleScreenShare = { viewModel.toggleAllowScreenShare(it) },
+                        onToggleChat = { viewModel.toggleAllowChat(it) },
+                        onToggleUnmute = { viewModel.toggleAllowUnmute(it) },
+                        onToggleWatermark = { viewModel.toggleWatermark(it) },
+                        onDismiss = { viewModel.showSecurity(false) }
+                    )
+                }
+
+                // Diagnostics HUD Dialog
+                if (state.showDiagnostics) {
+                    DiagnosticsDialog(
+                        rttMs = state.rttMs,
+                        packetLossPct = state.packetLossPct,
+                        onDismiss = { viewModel.showDiagnostics(false) }
+                    )
+                }
             }
         }
     }
