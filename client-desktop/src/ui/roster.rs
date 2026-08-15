@@ -93,8 +93,7 @@ pub fn render_roster(app: &mut ConferApp, ui: &mut Ui) {
                     });
                 } else {
                     ScrollArea::vertical().show(ui, |ui| {
-                        let waiting_list = app.waiting_participants.clone();
-                        for p in waiting_list {
+                        for p in &app.waiting_participants {
                             egui::Frame::group(ui.style())
                                 .fill(Color32::from_rgb(26, 29, 33))
                                 .stroke(Stroke::new(1.0_f32, Color32::from_rgb(38, 42, 48)))

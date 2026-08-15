@@ -42,6 +42,11 @@ impl VideoFilter {
     }
 
     pub fn apply(&self, pixels: &mut [Color32], width: usize, height: usize) {
+        // `par_chunks_mut(width)` panics on a zero chunk size; a zero-sized
+        // frame has nothing to filter anyway.
+        if width == 0 || height == 0 {
+            return;
+        }
         match self {
             Self::None => {} // Passthrough
             Self::StudioGlow => apply_studio_glow(pixels, width, height),

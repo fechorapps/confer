@@ -10,7 +10,7 @@ pub const MAX_VISIBLE_CAPTIONS: usize = 3;
 
 /// Helper function to get initials from a display name
 pub fn get_speaker_initials(name: &str) -> String {
-    let parts: Vec<&str> = name.trim().split_whitespace().collect();
+    let parts: Vec<&str> = name.split_whitespace().collect();
     if parts.is_empty() {
         return "?".to_string();
     }
@@ -168,7 +168,7 @@ fn render_caption_chunk(ui: &mut Ui, cap: &CaptionChunkDto, now_ms: u64) {
             ui.label(RichText::new(&cap.text).size(13.5).color(text_color));
         } else {
             // Typing / interim indicator
-            ui.label(RichText::new(format!("{} ⚡", &cap.text)).size(13.5).italics().color(text_color));
+            ui.label(RichText::new(format!("{} ⚡", cap.text)).size(13.5).italics().color(text_color));
         }
     });
 }

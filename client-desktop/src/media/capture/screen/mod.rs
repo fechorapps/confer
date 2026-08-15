@@ -13,7 +13,10 @@ pub mod macos;
 #[cfg(target_os = "windows")]
 pub mod windows;
 
-pub type FrameSink = Arc<Mutex<Option<(u64, ColorImage)>>>;
+/// Shared slot where capture backends publish their newest frame. The frame
+/// sits behind an `Arc` so consumers only clone a refcount while holding the
+/// lock; the expensive pixel copy happens lock-free on the consumer side.
+pub type FrameSink = Arc<Mutex<Option<(u64, Arc<ColorImage>)>>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PickerMode {
@@ -170,7 +173,7 @@ impl ScreenCapturer {
         let (picker_mode, backend): (PickerMode, Box<dyn ScreenCaptureBackend>) = {
             (
                 PickerMode::DisplayList,
-                Box::new(linux_xshm::XshmBackend::new()),
+                Box::new(NullBackend::new()),
             )
         };
 
@@ -211,20 +214,52 @@ impl ScreenCapturer {
     }
 
     pub fn get_latest_frame_if_newer(&self, last_seen_id: u64) -> Option<(u64, ColorImage)> {
-        if let Ok(guard) = self.latest_frame.lock() {
-            if let Some((frame_id, img)) = &*guard {
-                if *frame_id > last_seen_id {
-                    return Some((*frame_id, img.clone()));
-                }
-            }
-        }
-        None
+        // Under the lock only the sequence id is checked and the `Arc` is
+        // cloned (a refcount bump); the expensive pixel-buffer clone happens
+        // after the lock is released so the capture worker is never blocked
+        // by a UI-side copy.
+        let latest = self.latest_frame.lock().ok().and_then(|guard| {
+            guard.as_ref().and_then(|(frame_id, img)| {
+                (*frame_id > last_seen_id).then(|| (*frame_id, img.clone()))
+            })
+        })?;
+        Some((latest.0, (*latest.1).clone()))
     }
 }
 
 impl Default for ScreenCapturer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Fallback backend for platforms without a native screen capture
+/// implementation: every `start` fails cleanly with
+/// [`CaptureError::UnsupportedPlatform`] instead of referencing a
+/// platform-gated backend that does not compile there.
+#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+pub struct NullBackend;
+
+#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+impl NullBackend {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+impl ScreenCaptureBackend for NullBackend {
+    fn start(&mut self, _sink: FrameSink, _display: Option<&DisplayInfo>) -> Result<(), CaptureError> {
+        Err(CaptureError::UnsupportedPlatform(format!(
+            "Screen capture is not supported on {}",
+            std::env::consts::OS
+        )))
+    }
+
+    fn stop(&mut self) {}
+
+    fn is_running(&self) -> bool {
+        false
     }
 }
 

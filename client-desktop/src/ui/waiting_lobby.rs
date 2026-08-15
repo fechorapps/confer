@@ -75,9 +75,9 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
 
                 // Main Title
                 let title = if app.room_title.is_empty() {
-                    "Meeting Room".to_string()
+                    "Meeting Room"
                 } else {
-                    app.room_title.clone()
+                    app.room_title.as_str()
                 };
                 ui.label(RichText::new(title).size(20.0).strong().color(Color32::from_rgb(248, 250, 252)));
 

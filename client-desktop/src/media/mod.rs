@@ -1,4 +1,3 @@
-pub mod background;
 pub mod capture;
 pub mod crypto;
 pub mod filters;

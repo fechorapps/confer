@@ -71,9 +71,11 @@ pub struct JoinMeetingResponse {
 pub struct ConferClient {
     pub server_url: String,
     pub http_client: HttpClient,
-    pub outgoing_tx: Option<mpsc::UnboundedSender<ClientMessage>>,
-    pub incoming_rx: Option<mpsc::UnboundedReceiver<ServerMessage>>,
+    pub outgoing_tx: Option<mpsc::Sender<ClientMessage>>,
+    pub incoming_rx: Option<mpsc::Receiver<ServerMessage>>,
     pub is_connected: Arc<AtomicBool>,
+    writer_task: Option<tokio::task::JoinHandle<()>>,
+    reader_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl ConferClient {
@@ -84,6 +86,8 @@ impl ConferClient {
             outgoing_tx: None,
             incoming_rx: None,
             is_connected: Arc::new(AtomicBool::new(false)),
+            writer_task: None,
+            reader_task: None,
         }
     }
 
@@ -186,30 +190,45 @@ impl ConferClient {
 
         let (ws_stream, _) = connect_async(req).await?;
 
+        // Abort any previous connection tasks before reconnecting.
+        if let Some(handle) = self.writer_task.take() {
+            handle.abort();
+        }
+        if let Some(handle) = self.reader_task.take() {
+            handle.abort();
+        }
+
         let (mut write, mut read) = ws_stream.split();
-        let (out_tx, mut out_rx) = mpsc::unbounded_channel::<ClientMessage>();
-        let (in_tx, in_rx) = mpsc::unbounded_channel::<ServerMessage>();
+        let (out_tx, mut out_rx) = mpsc::channel::<ClientMessage>(256);
+        let (in_tx, in_rx) = mpsc::channel::<ServerMessage>(256);
 
         let is_connected = self.is_connected.clone();
-        is_connected.store(true, Ordering::SeqCst);
+        is_connected.store(true, Ordering::Release);
 
         // Spawn writer task
         let is_connected_writer = is_connected.clone();
-        tokio::spawn(async move {
+        let writer_task = tokio::spawn(async move {
             while let Some(msg) = out_rx.recv().await {
-                if let Ok(json_text) = serde_json::to_string(&msg) {
-                    if write.send(Message::Text(json_text.into())).await.is_err() {
-                        break;
+                match serde_json::to_string(&msg) {
+                    Ok(json_text) => {
+                        if let Err(e) = write.send(Message::Text(json_text.into())).await {
+                            tracing::warn!("signaling writer: WebSocket send failed: {e}");
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("signaling writer: failed to serialize client message: {e}");
                     }
                 }
             }
-            is_connected_writer.store(false, Ordering::SeqCst);
+            is_connected_writer.store(false, Ordering::Release);
         });
+        let writer_abort = writer_task.abort_handle();
 
         // Spawn reader task
         let is_connected_reader = is_connected.clone();
         let out_tx_ping = out_tx.clone();
-        tokio::spawn(async move {
+        let reader_task = tokio::spawn(async move {
             let mut ping_interval = tokio::time::interval(Duration::from_secs(5));
             let mut seq = 0u64;
 
@@ -217,35 +236,63 @@ impl ConferClient {
                 tokio::select! {
                     _ = ping_interval.tick() => {
                         seq += 1;
-                        let _ = out_tx_ping.send(ClientMessage::Ping { seq });
+                        if let Err(e) = out_tx_ping.try_send(ClientMessage::Ping { seq }) {
+                            tracing::warn!("signaling reader: failed to enqueue ping: {e}");
+                        }
                     }
                     msg = read.next() => {
                         match msg {
                             Some(Ok(Message::Text(text))) => {
-                                if let Ok(server_msg) = serde_json::from_str::<ServerMessage>(&text) {
-                                    let _ = in_tx.send(server_msg);
+                                match serde_json::from_str::<ServerMessage>(&text) {
+                                    Ok(server_msg) => {
+                                        if let Err(e) = in_tx.send(server_msg).await {
+                                            tracing::warn!("signaling reader: incoming channel closed, dropping message: {e}");
+                                            break;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        let preview: String = text.chars().take(200).collect();
+                                        tracing::warn!("signaling reader: failed to parse server message: {e}; text: {preview}");
+                                    }
                                 }
                             }
-                            Some(Ok(Message::Close(_))) | None | Some(Err(_)) => {
+                            Some(Ok(Message::Close(frame))) => {
+                                tracing::warn!("signaling reader: WebSocket closed by peer: {frame:?}");
                                 break;
                             }
+                            Some(Err(e)) => {
+                                tracing::warn!("signaling reader: WebSocket error: {e}");
+                                break;
+                            }
+                            None => break,
                             _ => {}
                         }
                     }
                 }
             }
-            is_connected_reader.store(false, Ordering::SeqCst);
+            is_connected_reader.store(false, Ordering::Release);
+            // Reader ended (socket closed or error): cancel the writer so no orphan task remains.
+            writer_abort.abort();
         });
 
         self.outgoing_tx = Some(out_tx);
         self.incoming_rx = Some(in_rx);
+        self.writer_task = Some(writer_task);
+        self.reader_task = Some(reader_task);
 
         Ok(())
     }
 
     pub fn send_message(&self, message: ClientMessage) {
-        if let Some(tx) = &self.outgoing_tx {
-            let _ = tx.send(message);
+        match &self.outgoing_tx {
+            Some(tx) => {
+                if let Err(e) = tx.try_send(message) {
+                    tracing::warn!("failed to enqueue signaling message (channel full or closed): {e}");
+                }
+            }
+            None => {
+                tracing::warn!("send_message called with no active signaling connection; message dropped");
+            }
         }
     }
 }

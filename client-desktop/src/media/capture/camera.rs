@@ -17,7 +17,7 @@ use crate::media::virtual_background::{VirtualBackgroundMode, VirtualBackgroundP
 pub struct CameraCapturer {
     pub width: usize,
     pub height: usize,
-    latest_frame: Arc<Mutex<Option<(u64, ColorImage)>>>,
+    latest_frame: crate::media::capture::FrameSink,
     active_filter_atomic: Arc<AtomicU8>,
     active_bg_mutex: Arc<Mutex<VirtualBackgroundMode>>,
     is_running: Arc<AtomicBool>,
@@ -74,14 +74,16 @@ impl CameraCapturer {
     /// Fetches the newest frame only if a newer frame has been decoded since `last_seen_id`.
     /// This prevents redundant GPU texture uploads on 60 FPS UI repaints.
     pub fn get_latest_frame_if_newer(&self, last_seen_id: u64) -> Option<(u64, ColorImage)> {
-        if let Ok(guard) = self.latest_frame.lock() {
-            if let Some((frame_id, img)) = &*guard {
-                if *frame_id > last_seen_id {
-                    return Some((*frame_id, img.clone()));
-                }
-            }
-        }
-        None
+        // Under the lock only the sequence id is checked and the `Arc` is
+        // cloned (a refcount bump); the expensive pixel-buffer clone happens
+        // after the lock is released so the capture worker is never blocked
+        // by a UI-side copy.
+        let latest = self.latest_frame.lock().ok().and_then(|guard| {
+            guard.as_ref().and_then(|(frame_id, img)| {
+                (*frame_id > last_seen_id).then(|| (*frame_id, img.clone()))
+            })
+        })?;
+        Some((latest.0, (*latest.1).clone()))
     }
 }
 
@@ -139,7 +141,7 @@ fn try_init_hardware_camera(width: usize, height: usize) -> Option<Camera> {
 fn capture_loop(
     width: usize,
     height: usize,
-    frame_sink: Arc<Mutex<Option<(u64, ColorImage)>>>,
+    frame_sink: crate::media::capture::FrameSink,
     filter_ref: Arc<AtomicU8>,
     bg_ref: Arc<Mutex<VirtualBackgroundMode>>,
     is_running: Arc<AtomicBool>,
@@ -168,15 +170,19 @@ fn capture_loop(
                     if let Ok(decoded) = buffer.decode_image::<RgbFormat>() {
                         let (w, h) = (decoded.width() as usize, decoded.height() as usize);
                         if let Some(mut pixels) = convert::rgb_to_color32(decoded.as_raw(), w, h) {
-                            // Virtual background & filter
-                            if let Ok(bg_guard) = bg_ref.lock() {
-                                bg_processor.process_frame(&bg_guard, &mut pixels, w, h);
+                            // Virtual background & filter. Clone the mode
+                            // (cheap except a PathBuf string) and drop the
+                            // lock before the expensive frame processing so
+                            // `set_background` from the UI never stalls.
+                            let bg_mode = bg_ref.lock().ok().map(|guard| guard.clone());
+                            if let Some(mode) = bg_mode {
+                                bg_processor.process_frame(&mode, &mut pixels, w, h);
                             }
                             apply_active_filter(&filter_ref, &mut pixels, w, h);
 
                             frame_seq += 1;
                             if let Ok(mut guard) = frame_sink.lock() {
-                                *guard = Some((frame_seq, ColorImage { size: [w, h], pixels }));
+                                *guard = Some((frame_seq, Arc::new(ColorImage { size: [w, h], pixels })));
                             }
                             continue;
                         }
@@ -197,14 +203,15 @@ fn capture_loop(
         let mut pixels = generate_synthetic_avatar_frame(w, h, elapsed);
 
         // Apply background / filter to synthetic frame
-        if let Ok(bg_guard) = bg_ref.lock() {
-            bg_processor.process_frame(&bg_guard, &mut pixels, w, h);
+        let bg_mode = bg_ref.lock().ok().map(|guard| guard.clone());
+        if let Some(mode) = bg_mode {
+            bg_processor.process_frame(&mode, &mut pixels, w, h);
         }
         apply_active_filter(&filter_ref, &mut pixels, w, h);
 
         frame_seq += 1;
         if let Ok(mut guard) = frame_sink.lock() {
-            *guard = Some((frame_seq, ColorImage { size: [w, h], pixels }));
+            *guard = Some((frame_seq, Arc::new(ColorImage { size: [w, h], pixels })));
         }
 
         // 30 FPS rate limiter for synthetic generator
@@ -275,6 +282,10 @@ fn tune_v4l2_hardware_controls(device_path: &str) {
             value: i32,
         }
 
+        // VIDIOC_S_CTRL from <linux/videodev2.h>: _IOWR('V', 28, struct v4l2_control)
+        // with a 2-field (u32 id, i32 value) struct, i.e. 0xc008561c on the
+        // generic ioctl encoding. Neither `libc` nor `nix` expose this
+        // constant, so it is hardcoded here.
         const VIDIOC_S_CTRL: libc::c_ulong = 0xc008561c;
         const V4L2_CID_BASE: u32 = 0x00980900;
         const V4L2_CID_CONTRAST: u32 = V4L2_CID_BASE + 1;
@@ -293,6 +304,10 @@ fn tune_v4l2_hardware_controls(device_path: &str) {
 
         for (id, val) in controls {
             let mut ctrl = V4l2Control { id, value: val };
+            // SAFETY: `fd` is a valid open V4L2 device fd and `ctrl` points
+            // to a live `V4l2Control` matching the kernel's
+            // `struct v4l2_control` layout expected by VIDIOC_S_CTRL; the
+            // return value is ignored (best-effort tuning).
             unsafe {
                 let _ = libc::ioctl(fd, VIDIOC_S_CTRL, &mut ctrl);
             }

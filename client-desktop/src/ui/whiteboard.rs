@@ -198,7 +198,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                                 .hint_text("Type whiteboard text..."),
                         );
 
-                        if ui
+                        if (ui
                             .add(
                                 egui::Button::new(
                                     RichText::new("Place Text").size(11.0).color(Color32::WHITE),
@@ -207,12 +207,11 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                                 .rounding(4.0),
                             )
                             .clicked()
-                            || (text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))
+                            || (text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))))
+                            && !app.whiteboard_text_input.trim().is_empty()
                         {
-                            if !app.whiteboard_text_input.trim().is_empty() {
-                                let pos = app.whiteboard_text_pos.unwrap_or(Pos2::new(100.0, 100.0));
-                                app.commit_whiteboard_text(pos);
-                            }
+                            let pos = app.whiteboard_text_pos.unwrap_or(Pos2::new(100.0, 100.0));
+                            app.commit_whiteboard_text(pos);
                         }
                     });
                 }
@@ -271,35 +270,33 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                             } else {
                                 app.whiteboard_current_points.push(rel_pos2);
                             }
-                        } else if response.drag_stopped() {
-                            if !app.whiteboard_current_points.is_empty() {
-                                let points = if app.whiteboard_current_points.len() == 1 {
-                                    vec![
-                                        [app.whiteboard_current_points[0].x, app.whiteboard_current_points[0].y],
-                                        [app.whiteboard_current_points[0].x + 0.1, app.whiteboard_current_points[0].y + 0.1],
-                                    ]
-                                } else {
-                                    app.whiteboard_current_points
-                                        .iter()
-                                        .map(|p| [p.x, p.y])
-                                        .collect()
-                                };
+                        } else if response.drag_stopped() && !app.whiteboard_current_points.is_empty() {
+                            let points = if app.whiteboard_current_points.len() == 1 {
+                                vec![
+                                    [app.whiteboard_current_points[0].x, app.whiteboard_current_points[0].y],
+                                    [app.whiteboard_current_points[0].x + 0.1, app.whiteboard_current_points[0].y + 0.1],
+                                ]
+                            } else {
+                                app.whiteboard_current_points
+                                    .iter()
+                                    .map(|p| [p.x, p.y])
+                                    .collect()
+                            };
 
-                                let stroke = WhiteboardStrokeDto {
-                                    id: Uuid::new_v4(),
-                                    participant_id: app.my_participant_id.unwrap_or(Uuid::nil()),
-                                    shape: WhiteboardShapeDto::Pen { points },
-                                    color: WhiteboardColorDto::new(
-                                        app.whiteboard_color.r(),
-                                        app.whiteboard_color.g(),
-                                        app.whiteboard_color.b(),
-                                        app.whiteboard_color.a(),
-                                    ),
-                                    stroke_width: app.whiteboard_stroke_width,
-                                };
-                                app.add_whiteboard_stroke(stroke);
-                                app.whiteboard_current_points.clear();
-                            }
+                            let stroke = WhiteboardStrokeDto {
+                                id: Uuid::new_v4(),
+                                participant_id: app.my_participant_id.unwrap_or(Uuid::nil()),
+                                shape: WhiteboardShapeDto::Pen { points },
+                                color: WhiteboardColorDto::new(
+                                    app.whiteboard_color.r(),
+                                    app.whiteboard_color.g(),
+                                    app.whiteboard_color.b(),
+                                    app.whiteboard_color.a(),
+                                ),
+                                stroke_width: app.whiteboard_stroke_width,
+                            };
+                            app.add_whiteboard_stroke(stroke);
+                            app.whiteboard_current_points.clear();
                         }
                     }
 
@@ -433,9 +430,9 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
 
             match &stroke.shape {
                 WhiteboardShapeDto::Pen { points } => {
-                    for i in 0..points.len().saturating_sub(1) {
-                        let p1 = canvas_rect.min + Vec2::new(points[i][0], points[i][1]);
-                        let p2 = canvas_rect.min + Vec2::new(points[i + 1][0], points[i + 1][1]);
+                    for pair in points.windows(2) {
+                        let p1 = canvas_rect.min + Vec2::new(pair[0][0], pair[0][1]);
+                        let p2 = canvas_rect.min + Vec2::new(pair[1][0], pair[1][1]);
                         painter.line_segment([p1, p2], egui_stroke);
                         painter.circle_filled(p1, stroke.stroke_width * 0.5, color);
                     }
@@ -482,9 +479,9 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
         match app.whiteboard_tool {
             WhiteboardTool::Pen => {
                 let pts = &app.whiteboard_current_points;
-                for i in 0..pts.len().saturating_sub(1) {
-                    let p1 = canvas_rect.min + Vec2::new(pts[i].x, pts[i].y);
-                    let p2 = canvas_rect.min + Vec2::new(pts[i + 1].x, pts[i + 1].y);
+                for pair in pts.windows(2) {
+                    let p1 = canvas_rect.min + Vec2::new(pair[0].x, pair[0].y);
+                    let p2 = canvas_rect.min + Vec2::new(pair[1].x, pair[1].y);
                     painter.line_segment([p1, p2], current_stroke);
                     painter.circle_filled(p1, app.whiteboard_stroke_width * 0.5, current_color);
                 }
@@ -556,9 +553,9 @@ pub fn erase_strokes_at(strokes: &mut Vec<WhiteboardStrokeDto>, point: Pos2, era
 
         match &stroke.shape {
             WhiteboardShapeDto::Pen { points } => {
-                for i in 0..points.len().saturating_sub(1) {
-                    let a = Pos2::new(points[i][0], points[i][1]);
-                    let b = Pos2::new(points[i + 1][0], points[i + 1][1]);
+                for pair in points.windows(2) {
+                    let a = Pos2::new(pair[0][0], pair[0][1]);
+                    let b = Pos2::new(pair[1][0], pair[1][1]);
                     if dist_point_to_segment(point, a, b) <= threshold {
                         return false;
                     }

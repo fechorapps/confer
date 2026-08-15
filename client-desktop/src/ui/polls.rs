@@ -232,11 +232,9 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                                             selected_set.remove(&opt.id);
                                         }
                                     }
-                                } else {
-                                    if ui.radio(is_selected, RichText::new(&opt.text).size(12.0).color(Color32::WHITE)).clicked() {
-                                        selected_set.clear();
-                                        selected_set.insert(opt.id);
-                                    }
+                                } else if ui.radio(is_selected, RichText::new(&opt.text).size(12.0).color(Color32::WHITE)).clicked() {
+                                    selected_set.clear();
+                                    selected_set.insert(opt.id);
                                 }
                                 ui.add_space(4.0);
                             }
@@ -432,8 +430,8 @@ fn render_poll_creation_form(app: &mut ConferApp, ui: &mut Ui) {
                             .hint_text(format!("Option {}", idx + 1)),
                     );
 
-                    if options_count > 2 {
-                        if ui
+                    if options_count > 2
+                        && ui
                             .add(
                                 egui::Button::new(
                                     RichText::new("✕").size(10.0).color(Color32::from_rgb(248, 113, 113)),
@@ -442,9 +440,8 @@ fn render_poll_creation_form(app: &mut ConferApp, ui: &mut Ui) {
                                 .rounding(4.0),
                             )
                             .clicked()
-                        {
-                            option_to_remove = Some(idx);
-                        }
+                    {
+                        option_to_remove = Some(idx);
                     }
                 });
                 ui.add_space(4.0);
@@ -454,8 +451,8 @@ fn render_poll_creation_form(app: &mut ConferApp, ui: &mut Ui) {
                 app.poll_create_options.remove(idx);
             }
 
-            if app.poll_create_options.len() < 8 {
-                if ui
+            if app.poll_create_options.len() < 8
+                && ui
                     .add(
                         egui::Button::new(
                             RichText::new("+ Add Option")
@@ -466,9 +463,8 @@ fn render_poll_creation_form(app: &mut ConferApp, ui: &mut Ui) {
                         .rounding(4.0),
                     )
                     .clicked()
-                {
-                    app.poll_create_options.push("".to_string());
-                }
+            {
+                app.poll_create_options.push("".to_string());
             }
 
             ui.add_space(10.0);

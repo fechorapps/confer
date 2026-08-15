@@ -63,8 +63,9 @@ impl ScreenCaptureBackend for XshmBackend {
         let is_running = Arc::new(AtomicBool::new(true));
         self.is_running = is_running.clone();
 
+        let args = XshmArgs { conn, root, x, y, width, height };
         let handle = thread::spawn(move || {
-            capture_xshm_loop(conn, root, x, y, width, height, sink, is_running);
+            capture_xshm_loop(args, sink, is_running);
         });
 
         self.worker_handle = Some(handle);
@@ -89,16 +90,21 @@ impl Drop for XshmBackend {
     }
 }
 
-fn capture_xshm_loop(
+struct XshmArgs {
     conn: RustConnection,
     root: u32,
     x: i32,
     y: i32,
     width: u32,
     height: u32,
+}
+
+fn capture_xshm_loop(
+    args: XshmArgs,
     sink: FrameSink,
     is_running: Arc<AtomicBool>,
 ) {
+    let XshmArgs { conn, root, x, y, width, height } = args;
     let size = (width * height * 4) as usize;
 
     let shmid = unsafe { libc::shmget(libc::IPC_PRIVATE, size, libc::IPC_CREAT | 0o600) };

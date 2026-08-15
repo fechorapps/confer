@@ -52,18 +52,23 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                             app.start_native_screen_share();
                         }
                     } else {
+                        let mut selected_display: Option<usize> = None;
                         ui.menu_button(RichText::new("🖥 Share").size(12.0).color(Color32::WHITE), |ui| {
                             ui.set_min_width(220.0);
                             ui.label(RichText::new("Select Display to Share").size(11.0).strong().color(Color32::from_rgb(56, 189, 248)));
                             ui.separator();
-                            let displays = app.available_displays.clone();
-                            for d in displays {
+                            for (idx, d) in app.available_displays.iter().enumerate() {
                                 if ui.button(RichText::new(&d.label).size(11.0).color(Color32::WHITE)).clicked() {
-                                    app.start_screen_share(d);
+                                    selected_display = Some(idx);
                                     ui.close_menu();
                                 }
                             }
                         });
+                        if let Some(idx) = selected_display {
+                            if let Some(d) = app.available_displays.get(idx).cloned() {
+                                app.start_screen_share(d);
+                            }
+                        }
                     }
 
                     // Hand Raise

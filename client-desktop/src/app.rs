@@ -568,11 +568,10 @@ impl ConferApp {
 
     pub fn toggle_whiteboard(&mut self) {
         self.is_whiteboard_active = !self.is_whiteboard_active;
-        if self.is_whiteboard_active {
-            if self.is_screen_sharing {
+        if self.is_whiteboard_active
+            && self.is_screen_sharing {
                 self.stop_screen_share();
             }
-        }
     }
 
     pub fn toggle_polls(&mut self) {

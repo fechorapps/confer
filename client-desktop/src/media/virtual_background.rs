@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::cell::RefCell;
+use std::path::{Path, PathBuf};
 use egui::Color32;
 use rayon::prelude::*;
 
@@ -53,6 +54,42 @@ impl VirtualBackgroundMode {
 pub struct VirtualBackgroundProcessor {
     pub blur_sigma: f32,
     pub blur_radius: usize,
+    /// Decoded and resized `CustomImage` background, reloaded only when the
+    /// path or frame dimensions change. Interior mutability keeps
+    /// `process_frame` callable through `&self` from the capture thread.
+    custom_image_cache: RefCell<Option<CachedCustomImage>>,
+}
+
+/// A decoded custom background image resized to the frame dimensions.
+/// `rgb` is `None` when the image failed to load (failure already logged once).
+#[derive(Debug, Clone)]
+struct CachedCustomImage {
+    path: PathBuf,
+    width: usize,
+    height: usize,
+    rgb: Option<Vec<u8>>,
+}
+
+impl CachedCustomImage {
+    fn load(path: &Path, width: usize, height: usize) -> Self {
+        let rgb = match image::open(path) {
+            Ok(img) => Some(
+                img.resize_exact(width as u32, height as u32, image::imageops::FilterType::Nearest)
+                    .to_rgb8()
+                    .into_raw(),
+            ),
+            Err(e) => {
+                tracing::warn!("Failed to load custom virtual background image {}: {e}", path.display());
+                None
+            }
+        };
+        Self {
+            path: path.to_path_buf(),
+            width,
+            height,
+            rgb,
+        }
+    }
 }
 
 impl VirtualBackgroundProcessor {
@@ -61,6 +98,7 @@ impl VirtualBackgroundProcessor {
         Self {
             blur_sigma: 4.5,
             blur_radius: 8,
+            custom_image_cache: RefCell::new(None),
         }
     }
 
@@ -144,7 +182,7 @@ impl VirtualBackgroundProcessor {
         let mut temp = vec![Color32::BLACK; width * height];
         temp.par_chunks_mut(width).enumerate().for_each(|(y, row)| {
             let row_offset = y * width;
-            for x in 0..width {
+            for (x, pixel) in row.iter_mut().enumerate().take(width) {
                 let mut r_acc = 0.0f32;
                 let mut g_acc = 0.0f32;
                 let mut b_acc = 0.0f32;
@@ -161,7 +199,7 @@ impl VirtualBackgroundProcessor {
                     a_acc += px.a() as f32 * weight;
                 }
 
-                row[x] = Color32::from_rgba_premultiplied(
+                *pixel = Color32::from_rgba_premultiplied(
                     r_acc.clamp(0.0, 255.0) as u8,
                     g_acc.clamp(0.0, 255.0) as u8,
                     b_acc.clamp(0.0, 255.0) as u8,
@@ -173,7 +211,7 @@ impl VirtualBackgroundProcessor {
         // Pass 2: Vertical 1D blur (temp -> output)
         let mut output = vec![Color32::BLACK; width * height];
         output.par_chunks_mut(width).enumerate().for_each(|(y, row)| {
-            for x in 0..width {
+            for (x, pixel) in row.iter_mut().enumerate().take(width) {
                 let mut r_acc = 0.0f32;
                 let mut g_acc = 0.0f32;
                 let mut b_acc = 0.0f32;
@@ -190,7 +228,7 @@ impl VirtualBackgroundProcessor {
                     a_acc += px.a() as f32 * weight;
                 }
 
-                row[x] = Color32::from_rgba_premultiplied(
+                *pixel = Color32::from_rgba_premultiplied(
                     r_acc.clamp(0.0, 255.0) as u8,
                     g_acc.clamp(0.0, 255.0) as u8,
                     b_acc.clamp(0.0, 255.0) as u8,
@@ -211,15 +249,22 @@ impl VirtualBackgroundProcessor {
         matte: &[f32],
         output: &mut [Color32],
     ) {
-        assert_eq!(foreground.len(), background.len());
-        assert_eq!(foreground.len(), matte.len());
-        assert_eq!(foreground.len(), output.len());
+        // Never panic on mismatched buffer lengths in the render path:
+        // process only up to the shortest buffer instead.
+        let len = foreground
+            .len()
+            .min(background.len())
+            .min(matte.len())
+            .min(output.len());
+        debug_assert_eq!(foreground.len(), background.len());
+        debug_assert_eq!(foreground.len(), matte.len());
+        debug_assert_eq!(foreground.len(), output.len());
 
-        output
+        output[..len]
             .par_iter_mut()
-            .zip(foreground.par_iter())
-            .zip(background.par_iter())
-            .zip(matte.par_iter())
+            .zip(foreground[..len].par_iter())
+            .zip(background[..len].par_iter())
+            .zip(matte[..len].par_iter())
             .for_each(|(((out, fg), bg), &alpha)| {
                 let r = (fg.r() as f32 * alpha + bg.r() as f32 * (1.0 - alpha)) as u8;
                 let g = (fg.g() as f32 * alpha + bg.g() as f32 * (1.0 - alpha)) as u8;
@@ -338,12 +383,18 @@ impl VirtualBackgroundProcessor {
                 });
             }
             VirtualBackgroundMode::CustomImage(path) => {
-                if let Ok(img) = image::open(path) {
-                    let resized = img
-                        .resize_exact(width as u32, height as u32, image::imageops::FilterType::Nearest)
-                        .to_rgb8();
-                    let bg_raw = resized.as_raw();
+                // Reload the decoded/resized image only when the path or the
+                // frame dimensions change — never once per frame.
+                let mut cache = self.custom_image_cache.borrow_mut();
+                let stale = cache
+                    .as_ref()
+                    .is_none_or(|c| c.path != *path || c.width != width || c.height != height);
+                if stale {
+                    *cache = Some(CachedCustomImage::load(path, width, height));
+                }
 
+                let bg_raw = cache.as_ref().and_then(|c| c.rgb.as_deref());
+                if let Some(bg_raw) = bg_raw {
                     let cx = width as f32 / 2.0;
                     let cy = height as f32 / 2.0;
                     let w_f = width as f32;

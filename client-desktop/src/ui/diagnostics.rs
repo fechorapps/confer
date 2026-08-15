@@ -19,10 +19,16 @@ pub fn render_diagnostics(app: &mut ConferApp, ctx: &egui::Context) {
 
                     ui.horizontal(|ui| {
                         ui.label(RichText::new("Memory Footprint:").size(12.0).color(Color32::from_rgb(148, 163, 184)));
-                        let mem_mb = get_process_memory_mb();
-                        let color = if mem_mb < 40.0 { Color32::from_rgb(16, 185, 129) } else { Color32::from_rgb(245, 158, 11) };
-                        ui.label(RichText::new(format!("{:.1} MB", mem_mb)).strong().size(12.0).color(color));
-                        ui.label(RichText::new("(< 40MB target)").size(10.0).color(Color32::from_rgb(100, 116, 139)));
+                        match get_process_memory_mb() {
+                            Some(mem_mb) => {
+                                let color = if mem_mb < 40.0 { Color32::from_rgb(16, 185, 129) } else { Color32::from_rgb(245, 158, 11) };
+                                ui.label(RichText::new(format!("{:.1} MB", mem_mb)).strong().size(12.0).color(color));
+                                ui.label(RichText::new("(< 40MB target)").size(10.0).color(Color32::from_rgb(100, 116, 139)));
+                            }
+                            None => {
+                                ui.label(RichText::new("—").strong().size(12.0).color(Color32::from_rgb(100, 116, 139)));
+                            }
+                        }
                     });
 
                     ui.horizontal(|ui| {
@@ -46,36 +52,43 @@ pub fn render_diagnostics(app: &mut ConferApp, ctx: &egui::Context) {
                     ui.label(RichText::new("MEDIA ENGINE").size(11.0).strong().color(Color32::from_rgb(56, 189, 248)));
                     ui.add_space(6.0);
 
+                    // Static capture/encode configuration (not live telemetry)
                     ui.horizontal(|ui| {
                         ui.label(RichText::new("Video Pipeline:").size(12.0).color(Color32::from_rgb(148, 163, 184)));
-                        ui.label(RichText::new("V4L2 720p HD (30 FPS)").size(12.0).color(Color32::from_rgb(16, 185, 129)));
+                        ui.label(RichText::new("V4L2 720p HD (30 FPS)").size(12.0).color(Color32::from_rgb(248, 250, 252)));
+                        ui.label(RichText::new("(config)").size(10.0).color(Color32::from_rgb(100, 116, 139)));
                     });
 
+                    // Simulcast layer selection is not tracked client-side yet
                     ui.horizontal(|ui| {
                         ui.label(RichText::new("Simulcast Layer:").size(12.0).color(Color32::from_rgb(148, 163, 184)));
-                        ui.label(RichText::new("Layer F (High 720p)").size(12.0).color(Color32::from_rgb(16, 185, 129)));
+                        ui.label(RichText::new("—").size(12.0).color(Color32::from_rgb(100, 116, 139)));
                     });
 
                     ui.horizontal(|ui| {
                         ui.label(RichText::new("Audio Encoding:").size(12.0).color(Color32::from_rgb(148, 163, 184)));
                         ui.label(RichText::new("Opus 48kHz Stereo").size(12.0).color(Color32::from_rgb(248, 250, 252)));
+                        ui.label(RichText::new("(config)").size(10.0).color(Color32::from_rgb(100, 116, 139)));
                     });
                 });
         });
 }
 
-fn get_process_memory_mb() -> f32 {
+/// Returns the process resident set size in MB, or `None` if it cannot be measured.
+fn get_process_memory_mb() -> Option<f32> {
     #[cfg(target_os = "linux")]
     {
-        if let Ok(statm) = std::fs::read_to_string("/proc/self/statm") {
-            let parts: Vec<&str> = statm.split_whitespace().collect();
-            if parts.len() >= 2 {
-                if let Ok(rss_pages) = parts[1].parse::<u64>() {
-                    let page_size_kb = 4;
-                    return (rss_pages * page_size_kb) as f32 / 1024.0;
-                }
-            }
+        let statm = std::fs::read_to_string("/proc/self/statm").ok()?;
+        let rss_pages: u64 = statm.split_whitespace().nth(1)?.parse().ok()?;
+        // SAFETY: sysconf(_SC_PAGESIZE) is always safe to call; it has no side effects.
+        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+        if page_size <= 0 {
+            return None;
         }
+        Some((rss_pages as f64 * page_size as f64 / (1024.0 * 1024.0)) as f32)
     }
-    28.5
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
 }

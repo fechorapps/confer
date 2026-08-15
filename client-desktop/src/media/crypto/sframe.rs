@@ -96,19 +96,18 @@ impl SFrameHeader {
             1
         } else {
             let bits = 64 - counter.leading_zeros() as usize;
-            ((bits + 7) / 8).min(8)
+            bits.div_ceil(8).min(8)
         }
     }
 
     /// Computes the minimal number of bytes required to encode the Key ID value.
     pub fn key_id_byte_len(key_id: u64) -> usize {
         if key_id <= 15 {
+            // Short Key IDs (0..=15) are packed into the config byte directly.
             0
-        } else if key_id == 0 {
-            1
         } else {
             let bits = 64 - key_id.leading_zeros() as usize;
-            ((bits + 7) / 8).min(8)
+            bits.div_ceil(8).min(8)
         }
     }
 
@@ -307,8 +306,8 @@ impl SFrameKey {
             .map_err(|e| SFrameError::RatchetFailed(format!("HKDF ratchet IV expansion failed: {:?}", e)))?;
 
         // Mix the previous Base IV with the newly derived IV
-        for i in 0..12 {
-            next_iv[i] ^= self.base_iv[i];
+        for (dst, src) in next_iv.iter_mut().zip(self.base_iv.iter()) {
+            *dst ^= src;
         }
 
         Ok(Self {
@@ -617,7 +616,7 @@ impl SFrameEngine {
         let filter = self
             .replay_filters
             .entry(header.key_id)
-            .or_insert_with(ReplayFilter::new);
+            .or_default();
         filter.check(header.counter)?;
 
         let header_bytes = &encrypted_payload[..header_len];
@@ -626,7 +625,6 @@ impl SFrameEngine {
         let plaintext = key.decrypt(&header, header_bytes, ciphertext_and_tag)?;
 
         // Update replay filter only after successful authentication
-        let filter = self.replay_filters.get_mut(&header.key_id).unwrap();
         filter.update(header.counter);
 
         Ok(plaintext)
@@ -650,7 +648,7 @@ impl SFrameEngine {
         let filter = self
             .replay_filters
             .entry(key_id)
-            .or_insert_with(ReplayFilter::new);
+            .or_default();
         filter.check(header.counter)?;
 
         let header_bytes = &encrypted_payload[..header_len];
@@ -658,7 +656,6 @@ impl SFrameEngine {
 
         let plaintext = key.decrypt(&header, header_bytes, ciphertext_and_tag)?;
 
-        let filter = self.replay_filters.get_mut(&key_id).unwrap();
         filter.update(header.counter);
 
         Ok(plaintext)

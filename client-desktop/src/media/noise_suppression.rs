@@ -68,8 +68,15 @@ impl AiNoiseSuppressor {
     /// Expects slices of length at least `Self::FRAME_SIZE` (480).
     /// Returns the VAD probability `[0.0, 1.0]`.
     pub fn process_frame(&mut self, output: &mut [f32], input: &[f32]) -> f32 {
-        assert!(input.len() >= Self::FRAME_SIZE, "input slice too short");
-        assert!(output.len() >= Self::FRAME_SIZE, "output slice too short");
+        if input.len() < Self::FRAME_SIZE || output.len() < Self::FRAME_SIZE {
+            tracing::warn!(
+                "process_frame: buffer too short (input: {}, output: {}, need: {})",
+                input.len(),
+                output.len(),
+                Self::FRAME_SIZE
+            );
+            return 0.0;
+        }
 
         let vad = self.denoiser.process_frame(&mut output[..Self::FRAME_SIZE], &input[..Self::FRAME_SIZE]);
         self.vad_confidence = vad;
@@ -81,16 +88,16 @@ impl AiNoiseSuppressor {
     /// Returns the VAD probability `[0.0, 1.0]`.
     pub fn process_frame_normalized_inplace(&mut self, frame: &mut [f32; Self::FRAME_SIZE]) -> f32 {
         let mut scaled_in = [0.0f32; Self::FRAME_SIZE];
-        for i in 0..Self::FRAME_SIZE {
-            scaled_in[i] = (frame[i] * Self::SCALE_FACTOR).clamp(-32768.0, 32767.0);
+        for (dst, &src) in scaled_in.iter_mut().zip(frame.iter()) {
+            *dst = (src * Self::SCALE_FACTOR).clamp(-32768.0, 32767.0);
         }
 
         let mut scaled_out = [0.0f32; Self::FRAME_SIZE];
         let vad = self.denoiser.process_frame(&mut scaled_out, &scaled_in);
         self.vad_confidence = vad;
 
-        for i in 0..Self::FRAME_SIZE {
-            frame[i] = (scaled_out[i] / Self::SCALE_FACTOR).clamp(-1.0, 1.0);
+        for (dst, &src) in frame.iter_mut().zip(scaled_out.iter()) {
+            *dst = (src / Self::SCALE_FACTOR).clamp(-1.0, 1.0);
         }
 
         vad
@@ -116,9 +123,11 @@ impl AiNoiseSuppressor {
 
             self.vad_confidence = self.denoiser.process_frame(&mut out_chunk, &in_chunk);
 
-            for &s in &out_chunk {
-                output.push((s / Self::SCALE_FACTOR).clamp(-1.0, 1.0));
-            }
+            output.extend(
+                out_chunk
+                    .iter()
+                    .map(|&s| (s / Self::SCALE_FACTOR).clamp(-1.0, 1.0)),
+            );
         }
 
         output
@@ -155,25 +164,23 @@ impl AiNoiseSuppressor {
     /// Denoises full 480-sample chunks directly in-place within a mutable `i16` slice.
     /// Any tail samples shorter than 480 are buffered in the internal FIFO.
     pub fn process_inplace_pcm16(&mut self, samples: &mut [i16]) {
-        let chunk_count = samples.len() / Self::FRAME_SIZE;
         let mut in_chunk = [0.0f32; Self::FRAME_SIZE];
         let mut out_chunk = [0.0f32; Self::FRAME_SIZE];
 
-        for i in 0..chunk_count {
-            let offset = i * Self::FRAME_SIZE;
-            for j in 0..Self::FRAME_SIZE {
-                in_chunk[j] = samples[offset + j] as f32;
+        let mut chunks = samples.chunks_exact_mut(Self::FRAME_SIZE);
+        for chunk in &mut chunks {
+            for (dst, &src) in in_chunk.iter_mut().zip(chunk.iter()) {
+                *dst = src as f32;
             }
 
             self.vad_confidence = self.denoiser.process_frame(&mut out_chunk, &in_chunk);
 
-            for j in 0..Self::FRAME_SIZE {
-                samples[offset + j] = out_chunk[j].clamp(-32768.0, 32767.0) as i16;
+            for (dst, &src) in chunk.iter_mut().zip(out_chunk.iter()) {
+                *dst = src.clamp(-32768.0, 32767.0) as i16;
             }
         }
 
-        let remainder_start = chunk_count * Self::FRAME_SIZE;
-        for &s in &samples[remainder_start..] {
+        for &s in chunks.into_remainder().iter() {
             self.fifo_in.push_back(s as f32);
         }
     }
@@ -188,8 +195,8 @@ impl AiNoiseSuppressor {
         let mut in_chunk = [0.0f32; Self::FRAME_SIZE];
         let mut out_chunk = [0.0f32; Self::FRAME_SIZE];
 
-        for i in 0..Self::FRAME_SIZE {
-            in_chunk[i] = self.fifo_in.pop_front().unwrap_or(0.0);
+        for item in in_chunk.iter_mut().take(Self::FRAME_SIZE) {
+            *item = self.fifo_in.pop_front().unwrap_or(0.0);
         }
 
         self.vad_confidence = self.denoiser.process_frame(&mut out_chunk, &in_chunk);
@@ -229,7 +236,7 @@ mod tests {
 
         let vad = suppressor.process_frame_inplace(&mut frame);
         // On pure silence, VAD probability should be low
-        assert!(vad >= 0.0 && vad <= 1.0);
+        assert!((0.0..=1.0).contains(&vad));
 
         // Output silence should remain near zero
         for &sample in &frame {
@@ -243,10 +250,10 @@ mod tests {
         let mut frame = [0.05f32; AiNoiseSuppressor::FRAME_SIZE];
 
         let vad = suppressor.process_frame_normalized_inplace(&mut frame);
-        assert!(vad >= 0.0 && vad <= 1.0);
+        assert!((0.0..=1.0).contains(&vad));
 
         for &sample in &frame {
-            assert!(sample >= -1.0 && sample <= 1.0);
+            assert!((-1.0..=1.0).contains(&sample));
         }
     }
 

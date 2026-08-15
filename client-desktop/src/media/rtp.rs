@@ -144,7 +144,7 @@ impl RtpHeader {
                 let profile = self.extension_profile.unwrap_or(Self::ONE_BYTE_EXT_PROFILE);
                 buf.extend_from_slice(&profile.to_be_bytes());
                 // Length is number of 32-bit words (excluding the 4-byte extension header itself)
-                let length_in_words = ((ext_data.len() + 3) / 4) as u16;
+                let length_in_words = ext_data.len().div_ceil(4) as u16;
                 buf.extend_from_slice(&length_in_words.to_be_bytes());
                 buf.extend_from_slice(ext_data);
 
@@ -277,9 +277,7 @@ impl RtpPacket {
 
         if self.padding_len > 0 {
             // Padding octets ending with the total padding byte count (RFC 3550 §5.1)
-            for _ in 0..(self.padding_len - 1) {
-                buf.push(0);
-            }
+            buf.resize(buf.len() + self.padding_len - 1, 0);
             buf.push(self.padding_len as u8);
         }
 
@@ -293,13 +291,13 @@ impl RtpPacket {
 
         let mut padding_len = 0;
         if header.padding {
-            if payload_slice.is_empty() {
+            let Some(&pad_byte) = payload_slice.last() else {
                 return Err(RtpError::BufferTooShort {
                     expected: 1,
                     actual: 0,
                 });
-            }
-            let pad_count = *payload_slice.last().unwrap() as usize;
+            };
+            let pad_count = pad_byte as usize;
             if pad_count == 0 || pad_count > payload_slice.len() {
                 return Err(RtpError::InvalidExtensionLength(pad_count));
             }
@@ -899,7 +897,11 @@ impl Vp8FrameAssembler {
             total_payload.extend_from_slice(&pkt.payload[desc_len..]);
         }
 
-        let descriptor = first_descriptor.unwrap();
+        let Some(descriptor) = first_descriptor else {
+            // Unreachable in practice: `packets` is non-empty and the first
+            // packet always sets `first_descriptor`; keep the invariant in the type.
+            return Err(RtpError::IncompleteFrame);
+        };
         let is_keyframe = if let Some(hdr) = Vp8FrameHeader::parse(&total_payload) {
             hdr.is_keyframe
         } else {
@@ -1268,7 +1270,7 @@ mod tests {
         let (parsed, size) = RtpHeader::parse(&buf).expect("Failed to parse RTP header");
         assert_eq!(size, 12);
         assert_eq!(parsed.version, 2);
-        assert_eq!(parsed.marker, true);
+        assert!(parsed.marker);
         assert_eq!(parsed.payload_type, 96);
         assert_eq!(parsed.sequence_number, 1024);
         assert_eq!(parsed.timestamp, 90000);
@@ -1295,7 +1297,7 @@ mod tests {
         assert_eq!(parsed.csrc_list.len(), 2);
         assert_eq!(parsed.csrc_list[0], 0x11111111);
         assert_eq!(parsed.csrc_list[1], 0x22222222);
-        assert_eq!(parsed.extension, true);
+        assert!(parsed.extension);
         assert_eq!(parsed.extension_profile, Some(RtpHeader::ONE_BYTE_EXT_PROFILE));
 
         let ext_parsed = OneByteHeaderExtension::parse_list(parsed.extension_data.as_ref().unwrap());
@@ -1303,7 +1305,7 @@ mod tests {
         assert_eq!(ext_parsed[0].id, 1);
 
         let audio_level_parsed = AudioLevelExtension::from_one_byte_extension(&ext_parsed[0]).unwrap();
-        assert_eq!(audio_level_parsed.voice_activity, true);
+        assert!(audio_level_parsed.voice_activity);
         assert_eq!(audio_level_parsed.level_dbov, 30);
     }
 
@@ -1318,7 +1320,7 @@ mod tests {
         assert_eq!(*raw.last().unwrap(), 4); // RFC 3550 §5.1 padding count at end
 
         let parsed = RtpPacket::parse(&raw).expect("Failed to parse padded packet");
-        assert_eq!(parsed.header.padding, true);
+        assert!(parsed.header.padding);
         assert_eq!(parsed.payload, payload);
         assert_eq!(parsed.padding_len, 4);
     }
@@ -1342,8 +1344,8 @@ mod tests {
 
         let (parsed, consumed) = Vp8PayloadDescriptor::parse(&buf).expect("Failed to parse VP8 descriptor");
         assert_eq!(consumed, buf.len());
-        assert_eq!(parsed.start_of_partition, true);
-        assert_eq!(parsed.non_reference, false);
+        assert!(parsed.start_of_partition);
+        assert!(!parsed.non_reference);
         assert_eq!(parsed.picture_id, Some(1500));
         assert_eq!(parsed.tl0_pic_idx, Some(25));
         assert_eq!(parsed.temporal_layer_id, Some(2));
@@ -1373,8 +1375,8 @@ mod tests {
         let (parsed, consumed) = Vp8PayloadDescriptor::parse(&buf).expect("Failed to parse 7-bit PicID");
         assert_eq!(consumed, 3);
         assert_eq!(parsed.picture_id, Some(63));
-        assert_eq!(parsed.non_reference, true);
-        assert_eq!(parsed.start_of_partition, false);
+        assert!(parsed.non_reference);
+        assert!(!parsed.start_of_partition);
     }
 
     #[test]
@@ -1384,8 +1386,8 @@ mod tests {
         let key_hdr = Vp8FrameHeader::build_keyframe_header(width, height, 4096);
 
         let parsed = Vp8FrameHeader::parse(&key_hdr).expect("Failed to parse keyframe header");
-        assert_eq!(parsed.is_keyframe, true);
-        assert_eq!(parsed.show_frame, true);
+        assert!(parsed.is_keyframe);
+        assert!(parsed.show_frame);
         assert_eq!(parsed.width, Some(1280));
         assert_eq!(parsed.height, Some(720));
     }
@@ -1416,14 +1418,14 @@ mod tests {
             assert_eq!(desc.picture_id, Some(1));
 
             if i == 0 {
-                assert_eq!(desc.start_of_partition, true);
-                assert_eq!(pkt.header.marker, false);
+                assert!(desc.start_of_partition);
+                assert!(!pkt.header.marker);
             } else if i == packets.len() - 1 {
-                assert_eq!(desc.start_of_partition, false);
-                assert_eq!(pkt.header.marker, true); // End of frame marker
+                assert!(!desc.start_of_partition);
+                assert!(pkt.header.marker); // End of frame marker
             } else {
-                assert_eq!(desc.start_of_partition, false);
-                assert_eq!(pkt.header.marker, false);
+                assert!(!desc.start_of_partition);
+                assert!(!pkt.header.marker);
             }
         }
 
@@ -1440,7 +1442,7 @@ mod tests {
         let frame = completed_frame.expect("Frame failed to complete assembly");
         assert_eq!(frame.timestamp, timestamp);
         assert_eq!(frame.picture_id, Some(1));
-        assert_eq!(frame.is_keyframe, true);
+        assert!(frame.is_keyframe);
         assert_eq!(frame.payload, frame_data);
     }
 
@@ -1483,7 +1485,7 @@ mod tests {
 
             let pkts = packetizer.packetize(&payload, current_ts, is_key);
             assert_eq!(pkts.first().unwrap().header.timestamp, current_ts);
-            assert_eq!(pkts.last().unwrap().header.marker, true);
+            assert!(pkts.last().unwrap().header.marker);
 
             current_ts += ts_step;
         }
@@ -1505,7 +1507,7 @@ mod tests {
         assert_eq!(packet.header.payload_type, 111);
         assert_eq!(packet.header.sequence_number, 1);
         assert_eq!(packet.header.timestamp, 0);
-        assert_eq!(packet.header.extension, true);
+        assert!(packet.header.extension);
 
         let depacketized = OpusDepacketizer::depacketize(&packet, Some(1)).expect("Depacketization failed");
         assert_eq!(depacketized.payload, synthetic_opus_bytes);
@@ -1513,7 +1515,7 @@ mod tests {
         assert_eq!(depacketized.timestamp, 0);
 
         let parsed_level = depacketized.audio_level.expect("Missing audio level extension");
-        assert_eq!(parsed_level.voice_activity, true);
+        assert!(parsed_level.voice_activity);
         assert_eq!(parsed_level.level_dbov, 18);
     }
 
@@ -1523,13 +1525,13 @@ mod tests {
         let loud_samples = vec![25000i16; 480];
         let (is_voice, dbov) = compute_pcm_audio_level_dbov(&loud_samples);
         assert!(dbov < 10);
-        assert_eq!(is_voice, true);
+        assert!(is_voice);
 
         // 2. Silence samples -> maximum -dBov value (127)
         let silence_samples = vec![0i16; 480];
         let (is_voice_silence, dbov_silence) = compute_pcm_audio_level_dbov(&silence_samples);
         assert_eq!(dbov_silence, 127);
-        assert_eq!(is_voice_silence, false);
+        assert!(!is_voice_silence);
     }
 
     #[test]
@@ -1549,7 +1551,7 @@ mod tests {
         let key_packets = capture_frame_to_vp8_rtp_packets(&captured_frame, &mut packetizer, 90000, true);
         assert!(!key_packets.is_empty());
         assert_eq!(key_packets.first().unwrap().header.payload_type, 96);
-        assert_eq!(key_packets.last().unwrap().header.marker, true);
+        assert!(key_packets.last().unwrap().header.marker);
 
         // Validate reassembly
         let mut assembler = Vp8FrameAssembler::new();
@@ -1560,7 +1562,7 @@ mod tests {
             }
         }
         let key_frame = assembled_key.expect("Keyframe should assemble");
-        assert_eq!(key_frame.is_keyframe, true);
+        assert!(key_frame.is_keyframe);
         assert_eq!(key_frame.timestamp, 90000);
 
         // 2. Packetize Interframe (delta frame)
@@ -1574,7 +1576,7 @@ mod tests {
             }
         }
         let delta_frame = assembled_delta.expect("Delta frame should assemble");
-        assert_eq!(delta_frame.is_keyframe, false);
+        assert!(!delta_frame.is_keyframe);
         assert_eq!(delta_frame.timestamp, 93000);
     }
 
@@ -1587,12 +1589,12 @@ mod tests {
 
         assert_eq!(rtp_packet.header.version, 2);
         assert_eq!(rtp_packet.header.payload_type, 111);
-        assert_eq!(rtp_packet.header.extension, true);
+        assert!(rtp_packet.header.extension);
 
         let decoded = OpusDepacketizer::depacketize(&rtp_packet, Some(1)).unwrap();
         assert!(!decoded.payload.is_empty());
         let audio_level = decoded.audio_level.unwrap();
-        assert_eq!(audio_level.voice_activity, true);
+        assert!(audio_level.voice_activity);
         assert!(audio_level.level_dbov < 20);
     }
 
@@ -1613,7 +1615,7 @@ mod tests {
         ).expect("Audio SFrame packetize failed");
 
         assert_eq!(encrypted_rtp_packet.header.payload_type, 111);
-        assert_eq!(encrypted_rtp_packet.header.extension, true);
+        assert!(encrypted_rtp_packet.header.extension);
 
         // Depacketize and decrypt
         let decrypted_opus_frame = OpusDepacketizer::depacketize_encrypted(
@@ -1625,7 +1627,7 @@ mod tests {
         assert!(!decrypted_opus_frame.payload.is_empty());
         assert_eq!(decrypted_opus_frame.payload[0], 0xF8); // TOC byte
         let audio_level = decrypted_opus_frame.audio_level.expect("Missing audio level");
-        assert_eq!(audio_level.voice_activity, true);
+        assert!(audio_level.voice_activity);
     }
 
     #[test]
@@ -1666,7 +1668,7 @@ mod tests {
         }
 
         let frame = assembled_frame.expect("Frame should reassemble and decrypt");
-        assert_eq!(frame.is_keyframe, true);
+        assert!(frame.is_keyframe);
         assert_eq!(frame.timestamp, 90000);
         assert!(!frame.payload.is_empty());
     }

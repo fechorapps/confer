@@ -17,7 +17,9 @@ pub use screen::{detect_displays, DisplayInfo, FrameSink, PickerMode, ScreenCapt
 pub(crate) fn join_with_timeout(handle: thread::JoinHandle<()>, timeout: Duration) {
     let (done_tx, done_rx) = std::sync::mpsc::channel();
     thread::spawn(move || {
-        let _ = handle.join();
+        if handle.join().is_err() {
+            tracing::error!("Capture worker thread panicked while shutting down");
+        }
         let _ = done_tx.send(());
     });
     if done_rx.recv_timeout(timeout).is_err() {
