@@ -45,6 +45,13 @@ public record TrackMappingDto(
     [property: JsonPropertyName("layer")] string Layer
 );
 
+public record IceCandidateDto(
+    [property: JsonPropertyName("candidate")] string Candidate,
+    [property: JsonPropertyName("sdp_mid")] string? SdpMid,
+    [property: JsonPropertyName("sdp_mline_index")] ushort? SdpMLineIndex,
+    [property: JsonPropertyName("username_fragment")] string? UsernameFragment = null
+);
+
 public record RoomTokenClaims(
     Guid MeetingId,
     Guid UserId,

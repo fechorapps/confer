@@ -13,7 +13,8 @@ public sealed class JoinMeetingCommandHandler(
     IConferDbContext dbContext,
     ITokenProvider tokenProvider,
     IPresenceService presenceService,
-    ISfuRoomManager sfuManager)
+    ISfuRoomManager sfuManager,
+    IIceServerProvider iceServerProvider)
     : ICommandHandler<JoinMeetingCommand, Result<JoinMeetingResponse>>
 {
     public async Task<Result<JoinMeetingResponse>> HandleAsync(
@@ -64,10 +65,7 @@ public sealed class JoinMeetingCommandHandler(
             session.SfuNodeId
         );
 
-        var iceServers = new List<IceServerConfig>
-        {
-            new(["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"])
-        };
+        var iceServers = iceServerProvider.GetIceServers();
 
         var isWaiting = status == ParticipationStatus.InWaitingRoom;
         return Result.Success(new JoinMeetingResponse(
