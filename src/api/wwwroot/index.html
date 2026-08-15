@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Confer — Real-Time Video Collaboration</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="dark-theme">
+  <div id="app" class="app-root">
+
+    <!-- Top Navigation Bar -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-logo">C</div>
+        <span class="brand-name">Confer</span>
+        <span class="badge-tag">Web v1.0</span>
+      </div>
+
+      <div class="header-center" id="header-meeting-info" style="display: none;">
+        <span class="meeting-title" id="room-title-display">Daily Standup</span>
+        <span class="join-code-badge" id="room-code-display" title="Click to copy join code">CODE: ------</span>
+        <span class="recording-indicator" id="recording-badge" style="display: none;">● REC</span>
+        <span class="stream-indicator" id="stream-badge" style="display: none;">📡 LIVE</span>
+      </div>
+
+      <div class="header-actions">
+        <button id="lang-toggle-btn" class="icon-btn-text" title="Switch Language">🌐 ES / EN</button>
+        <button id="diagnostics-btn" class="icon-btn-text" title="Toggle HUD">📊 <span id="rtt-metric">-- ms</span></button>
+        <div class="user-chip" id="user-chip">
+          <div class="avatar-circle" id="user-avatar">U</div>
+          <span class="user-name" id="user-display-name">Host User</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main View Router -->
+    <main class="app-main">
+
+      <!-- 1. Lobby Screen (Pre-Join) -->
+      <section id="lobby-view" class="view-panel active">
+        <div class="lobby-card">
+          <div class="lobby-preview-container">
+            <div class="video-preview-wrapper">
+              <video id="local-preview-video" autoplay playsinline muted></video>
+              <div class="video-placeholder" id="preview-avatar-placeholder">
+                <div class="avatar-huge" id="preview-avatar-letter">U</div>
+              </div>
+              <div class="audio-meter-bar">
+                <div class="audio-meter-level" id="preview-audio-meter"></div>
+              </div>
+            </div>
+
+            <div class="preview-device-toggles">
+              <button id="preview-mic-btn" class="dock-btn active" title="Toggle Microphone">🎙</button>
+              <button id="preview-cam-btn" class="dock-btn active" title="Toggle Camera">📹</button>
+              <button id="preview-denoise-btn" class="dock-btn active" title="AI Noise Suppression">⚡ Denoise</button>
+            </div>
+          </div>
+
+          <div class="lobby-controls">
+            <h2 id="i18n-lobby-title">Ready to join?</h2>
+            <p class="lobby-subtitle" id="i18n-lobby-subtitle">Verify your audio and camera before entering the room.</p>
+
+            <div class="input-group">
+              <label for="display-name-input" id="i18n-label-name">Display Name</label>
+              <input type="text" id="display-name-input" placeholder="Your full name" value="Host User (Dev)" />
+            </div>
+
+            <div class="lobby-actions-grid">
+              <div class="action-card">
+                <h3 id="i18n-create-title">Create New Meeting</h3>
+                <input type="text" id="create-title-input" placeholder="Meeting Title" value="Sprint Planning" />
+                <button id="create-meeting-btn" class="btn-primary">Start Meeting</button>
+              </div>
+
+              <div class="action-card">
+                <h3 id="i18n-join-title">Join Existing Meeting</h3>
+                <input type="text" id="join-code-input" placeholder="6-digit join code (e.g. 482910)" maxlength="12" />
+                <button id="join-meeting-btn" class="btn-secondary">Join Room</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. Waiting Room View -->
+      <section id="waiting-room-view" class="view-panel" style="display: none;">
+        <div class="waiting-room-card">
+          <div class="radar-pulse"></div>
+          <h2 id="i18n-waiting-title">Please wait, the host will let you in soon</h2>
+          <p class="waiting-subtitle" id="waiting-room-msg">The meeting host has enabled the Waiting Room policy for this session.</p>
+          <div class="waiting-meeting-badge" id="waiting-room-title">Meeting: Sprint Planning</div>
+          <button id="leave-waiting-btn" class="btn-danger">Leave Waiting Room</button>
+        </div>
+      </section>
+
+      <!-- 3. Active Meeting Room View -->
+      <section id="meeting-view" class="view-panel" style="display: none;">
+        <div class="meeting-layout">
+
+          <!-- Center Stage / Video Grid / Whiteboard -->
+          <div class="meeting-center-stage">
+
+            <!-- Video Grid -->
+            <div id="video-grid" class="video-grid">
+              <!-- Dynamically populated participant tiles -->
+            </div>
+
+            <!-- Whiteboard Layer -->
+            <div id="whiteboard-container" class="whiteboard-overlay" style="display: none;">
+              <div class="whiteboard-toolbar">
+                <button class="wb-tool-btn active" data-tool="pen" title="Pen">✏️</button>
+                <button class="wb-tool-btn" data-tool="line" title="Line">📏</button>
+                <button class="wb-tool-btn" data-tool="rect" title="Rectangle">⬜</button>
+                <button class="wb-tool-btn" data-tool="circle" title="Circle">⭕</button>
+                <button class="wb-tool-btn" data-tool="eraser" title="Eraser">🧹</button>
+                <div class="wb-divider"></div>
+                <input type="color" id="wb-color-picker" value="#ffffff" title="Pick Color" />
+                <input type="range" id="wb-stroke-width" min="1" max="20" value="3" title="Stroke Width" />
+                <div class="wb-divider"></div>
+                <button id="wb-undo-btn" class="wb-tool-btn" title="Undo">↩</button>
+                <button id="wb-clear-btn" class="wb-tool-btn" title="Clear All">🗑</button>
+                <button id="wb-close-btn" class="wb-tool-btn danger" title="Close Whiteboard">✕</button>
+              </div>
+              <canvas id="whiteboard-canvas"></canvas>
+            </div>
+
+            <!-- Watermark Layer -->
+            <div id="watermark-overlay" class="watermark-overlay" style="display: none;">
+              <div class="watermark-grid" id="watermark-pattern"></div>
+            </div>
+
+            <!-- Reaction Particles Container -->
+            <div id="reactions-container" class="reactions-particles"></div>
+          </div>
+
+          <!-- Side Drawer (Chat / Roster / Polls / Security) -->
+          <aside id="side-drawer" class="side-drawer" style="display: none;">
+            <div class="drawer-header">
+              <span id="drawer-title" class="drawer-title">Chat</span>
+              <button id="drawer-close-btn" class="icon-btn-text">✕</button>
+            </div>
+
+            <!-- Drawer Tab: Chat -->
+            <div id="drawer-chat" class="drawer-tab-pane active">
+              <div class="chat-messages-scroll" id="chat-messages-container"></div>
+              <form id="chat-input-form" class="chat-input-bar">
+                <input type="text" id="chat-message-input" placeholder="Send a message to everyone..." autocomplete="off" />
+                <button type="submit" class="btn-send">➤</button>
+              </form>
+            </div>
+
+            <!-- Drawer Tab: Participants / Roster -->
+            <div id="drawer-roster" class="drawer-tab-pane">
+              <div class="roster-subtabs" id="roster-host-tabs" style="display: none;">
+                <button class="subtab-btn active" id="tab-in-meeting">In Meeting (<span id="in-meeting-count">1</span>)</button>
+                <button class="subtab-btn" id="tab-waiting-room">Waiting (<span id="waiting-count">0</span>)</button>
+              </div>
+
+              <div id="roster-in-meeting-list" class="roster-list"></div>
+              <div id="roster-waiting-list" class="roster-list" style="display: none;">
+                <div class="waiting-header-actions">
+                  <button id="admit-all-btn" class="btn-sm btn-success">✓ Admit All</button>
+                </div>
+                <div id="waiting-participants-container"></div>
+              </div>
+            </div>
+
+            <!-- Drawer Tab: Polls -->
+            <div id="drawer-polls" class="drawer-tab-pane">
+              <div class="polls-container">
+                <div class="polls-creator" id="polls-creator-card">
+                  <h4>Create a Poll</h4>
+                  <input type="text" id="poll-question-input" placeholder="Ask a question..." />
+                  <div id="poll-options-inputs">
+                    <input type="text" class="poll-opt-input" placeholder="Option 1" />
+                    <input type="text" class="poll-opt-input" placeholder="Option 2" />
+                  </div>
+                  <button id="poll-add-opt-btn" class="btn-text-sm">+ Add Option</button>
+                  <div class="poll-checks">
+                    <label><input type="checkbox" id="poll-multichoice-check" /> Multi-choice</label>
+                    <label><input type="checkbox" id="poll-anon-check" /> Anonymous</label>
+                  </div>
+                  <button id="poll-launch-btn" class="btn-primary btn-sm">Launch Poll</button>
+                </div>
+
+                <div class="active-polls-list" id="active-polls-container"></div>
+              </div>
+            </div>
+
+            <!-- Drawer Tab: Security Policies (Host Only) -->
+            <div id="drawer-security" class="drawer-tab-pane">
+              <div class="security-panel">
+                <h4>Host Security Governance</h4>
+                <div class="policy-toggle-row">
+                  <span>🔒 Lock Meeting</span>
+                  <input type="checkbox" id="policy-lock-check" />
+                </div>
+                <div class="policy-toggle-row">
+                  <span>⏳ Enable Waiting Room</span>
+                  <input type="checkbox" id="policy-waiting-check" />
+                </div>
+                <div class="policy-toggle-row">
+                  <span>🖥 Allow Screen Share</span>
+                  <input type="checkbox" id="policy-screenshare-check" checked />
+                </div>
+                <div class="policy-toggle-row">
+                  <span>💬 Allow Chat</span>
+                  <input type="checkbox" id="policy-chat-check" checked />
+                </div>
+                <div class="policy-toggle-row">
+                  <span>🎙 Allow Unmute</span>
+                  <input type="checkbox" id="policy-unmute-check" checked />
+                </div>
+                <div class="policy-toggle-row">
+                  <span>🏷 Visual Watermark</span>
+                  <input type="checkbox" id="policy-watermark-check" />
+                </div>
+              </div>
+            </div>
+
+          </aside>
+        </div>
+
+        <!-- Floating Bottom Dock -->
+        <div class="floating-dock-container">
+          <div class="floating-dock">
+            <!-- Media Controls -->
+            <button id="dock-mic-btn" class="dock-pill active" title="Mute/Unmute (Ctrl+M, Space for PTT)">🎙 <span>Mute</span></button>
+            <button id="dock-cam-btn" class="dock-pill active" title="Start/Stop Video (Ctrl+E)">📹 <span>Camera</span></button>
+            <button id="dock-screenshare-btn" class="dock-pill" title="Share Screen (Ctrl+S)">🖥 <span>Share</span></button>
+            <button id="dock-whiteboard-btn" class="dock-pill" title="Collaborative Whiteboard">🖌 <span>Whiteboard</span></button>
+
+            <div class="dock-divider"></div>
+
+            <!-- Reactions & Engagement -->
+            <button id="dock-hand-btn" class="dock-pill" title="Raise/Lower Hand">✋ <span>Hand</span></button>
+            <div class="reactions-popover-trigger">
+              <button id="dock-reactions-btn" class="dock-pill" title="Reactions">✨ <span>React</span></button>
+              <div class="reactions-menu" id="reactions-menu">
+                <button class="emoji-btn" data-emoji="👍">👍</button>
+                <button class="emoji-btn" data-emoji="👏">👏</button>
+                <button class="emoji-btn" data-emoji="❤️">❤️</button>
+                <button class="emoji-btn" data-emoji="🎉">🎉</button>
+                <button class="emoji-btn" data-emoji="🔥">🔥</button>
+                <button class="emoji-btn" data-emoji="💡">💡</button>
+              </div>
+            </div>
+
+            <div class="dock-divider"></div>
+
+            <!-- Panels & Host Controls -->
+            <button id="dock-chat-btn" class="dock-pill" title="Chat">💬 <span>Chat</span> <span class="badge" id="chat-unread-badge" style="display: none;">0</span></button>
+            <button id="dock-roster-btn" class="dock-pill" title="Participants">👥 <span>People (<span id="dock-roster-count">1</span>)</span></button>
+            <button id="dock-polls-btn" class="dock-pill" title="Polls">📊 <span>Polls</span></button>
+            <button id="dock-security-btn" class="dock-pill" title="Host Security" style="display: none;">🛡 <span>Security</span></button>
+
+            <div class="dock-divider"></div>
+
+            <!-- Leave Call -->
+            <button id="dock-leave-btn" class="dock-pill leave" title="Leave Meeting">🚪 <span>Leave</span></button>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- Diagnostics HUD Modal -->
+    <div id="diagnostics-modal" class="modal-overlay" style="display: none;">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Diagnostics & Network Stats</h3>
+          <button id="diag-close-btn" class="icon-btn-text">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="metric-row"><span>Round Trip Time (RTT):</span><strong id="hud-rtt">24 ms</strong></div>
+          <div class="metric-row"><span>Packet Loss:</span><strong id="hud-loss">0.0 %</strong></div>
+          <div class="metric-row"><span>Signaling Protocol:</span><strong>confer.v1 (WebSocket)</strong></div>
+          <div class="metric-row"><span>Active Codec:</span><strong>VP8 (RFC 7741) / Opus (RFC 6464)</strong></div>
+          <div class="metric-row"><span>Media Topology:</span><strong>SIPSorcery SFU</strong></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
