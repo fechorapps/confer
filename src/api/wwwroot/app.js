@@ -15,6 +15,14 @@
     roomToken: null,
     ws: null,
     pingInterval: null,
+    participantId: null,
+    iceServers: [],
+    publishPc: null,
+    subscribePc: null,
+    remoteStreams: new Map(),
+    subscribeMappingQueue: [],
+    subscribeOfferChain: Promise.resolve(),
+    pendingIceCandidates: { publish: [], subscribe: [] },
     localStream: null,
     screenStream: null,
     audioContext: null,
@@ -520,9 +528,10 @@
       const loginRes = await fetch('/api/auth/dev-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: state.user.email, role: 'host' })
+        body: JSON.stringify({ email: state.user.email, displayName })
       });
       const loginData = await loginRes.json();
+      state.user.id = loginData.userId;
 
       // 2. Create meeting
       const createRes = await fetch('/api/meetings', {
@@ -531,7 +540,7 @@
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${loginData.token}`
         },
-        body: JSON.stringify({ title, max_participants: 50 })
+        body: JSON.stringify({ title, ownerId: loginData.userId, maxParticipants: 50 })
       });
       const meetingData = await createRes.json();
 
@@ -542,15 +551,16 @@
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${loginData.token}`
         },
-        body: JSON.stringify({ display_name: displayName, client_info: 'Confer Web 1.0' })
+        body: JSON.stringify({ userId: loginData.userId, displayName, clientInfo: 'Confer Web 1.0' })
       });
       const joinData = await joinRes.json();
 
       state.meeting = meetingData;
-      state.roomToken = joinData.room_token;
+      state.roomToken = joinData.roomToken;
+      state.iceServers = joinData.iceServers || [];
       state.user.role = 'host';
 
-      connectWebSocket(joinData.room_token);
+      connectWebSocket(joinData.roomToken);
       switchToMeetingView();
     } catch (err) {
       alert(`Failed to start meeting: ${err.message}`);
@@ -564,7 +574,7 @@
 
     try {
       // 1. Get meeting by code
-      const getRes = await fetch(`/api/meetings/code/${code}`);
+      const getRes = await fetch(`/api/meetings/${code}`);
       if (!getRes.ok) throw new Error("Meeting not found with this code");
       const meetingData = await getRes.json();
 
@@ -572,9 +582,10 @@
       const loginRes = await fetch('/api/auth/dev-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: `guest_${Date.now()}@confer.local`, role: 'participant' })
+        body: JSON.stringify({ email: `guest_${Date.now()}@confer.local`, displayName })
       });
       const loginData = await loginRes.json();
+      state.user.id = loginData.userId;
 
       // 3. Join meeting
       const joinRes = await fetch(`/api/meetings/${meetingData.id}/join`, {
@@ -583,22 +594,23 @@
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${loginData.token}`
         },
-        body: JSON.stringify({ display_name: displayName, client_info: 'Confer Web 1.0' })
+        body: JSON.stringify({ userId: loginData.userId, displayName, clientInfo: 'Confer Web 1.0' })
       });
       const joinData = await joinRes.json();
 
       state.meeting = meetingData;
-      state.roomToken = joinData.room_token;
+      state.roomToken = joinData.roomToken;
+      state.iceServers = joinData.iceServers || [];
       state.user.role = 'participant';
 
-      if (joinData.is_waiting) {
+      if (joinData.isWaitingRoom) {
         state.isWaitingRoom = true;
         switchToWaitingView();
       } else {
         switchToMeetingView();
       }
 
-      connectWebSocket(joinData.room_token);
+      connectWebSocket(joinData.roomToken);
     } catch (err) {
       alert(`Join error: ${err.message}`);
     }
@@ -643,6 +655,131 @@
     }
   }
 
+  // --- WebRTC (SFU publish/subscribe) ---
+  function toRtcIceServers(servers) {
+    return (servers || []).map(s => ({ urls: s.urls, username: s.username, credential: s.credential }));
+  }
+
+  async function initPublishConnection() {
+    if (state.publishPc) return;
+    const pc = new RTCPeerConnection({ iceServers: toRtcIceServers(state.iceServers) });
+    state.publishPc = pc;
+
+    pc.onicecandidate = (e) => {
+      if (!e.candidate) return;
+      sendWsMessage({
+        type: 'ice_candidate',
+        target: 'publish',
+        candidate: e.candidate.candidate,
+        sdp_mid: e.candidate.sdpMid,
+        sdp_mline_index: e.candidate.sdpMLineIndex
+      });
+    };
+
+    const tracks = [];
+    if (state.localStream) {
+      state.localStream.getTracks().forEach(track => {
+        pc.addTrack(track, state.localStream);
+        tracks.push({ track_id: `cam-${track.kind}`, kind: track.kind, simulcast: false });
+      });
+    }
+
+    if (tracks.length === 0) return;
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    sendWsMessage({ type: 'publish', sdp: offer.sdp, tracks });
+  }
+
+  function ensureSubscribeConnection() {
+    if (state.subscribePc) return state.subscribePc;
+    const pc = new RTCPeerConnection({ iceServers: toRtcIceServers(state.iceServers) });
+
+    pc.onicecandidate = (e) => {
+      if (!e.candidate) return;
+      sendWsMessage({
+        type: 'ice_candidate',
+        target: 'subscribe',
+        candidate: e.candidate.candidate,
+        sdp_mid: e.candidate.sdpMid,
+        sdp_mline_index: e.candidate.sdpMLineIndex
+      });
+    };
+
+    // Tracks arrive in the same order the matching 'subscribe_offer' listed them in its
+    // 'mapping' array (the server appends one m-line per new track, in that order), so a
+    // simple FIFO queue correlates each remote track back to its publisher.
+    pc.ontrack = (e) => {
+      const mapping = state.subscribeMappingQueue.shift();
+      if (!mapping) {
+        console.warn('Received a remote track with no pending track-mapping entry');
+        return;
+      }
+      attachRemoteTrack(mapping.publisher_id, e.track);
+    };
+
+    state.subscribePc = pc;
+    return pc;
+  }
+
+  function attachRemoteTrack(participantId, track) {
+    let stream = state.remoteStreams.get(participantId);
+    if (!stream) {
+      stream = new MediaStream();
+      state.remoteStreams.set(participantId, stream);
+    }
+    stream.addTrack(track);
+    track.addEventListener('ended', () => stream.removeTrack(track));
+    renderVideoGrid();
+  }
+
+  async function handleSubscribeOffer(msg) {
+    const pc = ensureSubscribeConnection();
+    (msg.mapping || []).forEach(m => state.subscribeMappingQueue.push(m));
+
+    await pc.setRemoteDescription({ type: 'offer', sdp: msg.sdp });
+    flushPendingIceCandidates('subscribe', pc);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    sendWsMessage({ type: 'subscribe_answer', sdp: answer.sdp });
+  }
+
+  function handleIceCandidateMessage(msg) {
+    if (!msg.candidate) return;
+    const target = msg.target === 'subscribe' ? 'subscribe' : 'publish';
+    const pc = target === 'subscribe' ? state.subscribePc : state.publishPc;
+    const init = {
+      candidate: msg.candidate,
+      sdpMid: msg.sdp_mid,
+      sdpMLineIndex: msg.sdp_mline_index
+    };
+
+    // Trickle ICE candidates for a PC can arrive before its remote description is applied
+    // (e.g. the server starts gathering as soon as it calls setLocalDescription, which races
+    // the 'publish_ok'/'subscribe_offer' message carrying that description). Queue until ready.
+    if (!pc || !pc.remoteDescription) {
+      state.pendingIceCandidates[target].push(init);
+      return;
+    }
+    pc.addIceCandidate(init).catch(e => console.warn('addIceCandidate failed:', e, JSON.stringify(init)));
+  }
+
+  function flushPendingIceCandidates(target, pc) {
+    const queued = state.pendingIceCandidates[target];
+    state.pendingIceCandidates[target] = [];
+    queued.forEach(init => pc.addIceCandidate(init).catch(e => console.warn('addIceCandidate failed:', e, JSON.stringify(init))));
+  }
+
+  function closeMediaConnections() {
+    if (state.publishPc) { state.publishPc.close(); state.publishPc = null; }
+    if (state.subscribePc) { state.subscribePc.close(); state.subscribePc = null; }
+    state.remoteStreams.clear();
+    state.subscribeMappingQueue = [];
+    state.subscribeOfferChain = Promise.resolve();
+    state.pendingIceCandidates = { publish: [], subscribe: [] };
+  }
+
   // --- WebSocket Protocol Handler ---
   function handleServerMessage(msg) {
     switch (msg.type) {
@@ -652,18 +789,46 @@
         els.hudRtt.textContent = `${state.rtt} ms`;
         break;
 
+      case 'joined':
+        state.participantId = msg.participant_id;
+        state.roster = (msg.roster || [])
+          .filter(p => p.participant_id !== msg.participant_id)
+          .map(p => ({ ...p, id: p.participant_id }));
+        updateRosterUI();
+        renderVideoGrid();
+        initPublishConnection().catch(e => console.error('Failed to start publishing:', e));
+        break;
+
       case 'roster_sync':
-        state.roster = msg.participants || [];
+        state.roster = (msg.participants || []).map(p => ({ ...p, id: p.participant_id ?? p.id }));
         updateRosterUI();
         renderVideoGrid();
         break;
 
       case 'participant_joined':
-        if (!state.roster.some(p => p.id === msg.participant.id)) {
-          state.roster.push(msg.participant);
+        if (!state.roster.some(p => p.id === msg.participant.participant_id)) {
+          state.roster.push({ ...msg.participant, id: msg.participant.participant_id });
           updateRosterUI();
           renderVideoGrid();
         }
+        break;
+
+      case 'publish_ok':
+        if (state.publishPc && msg.sdp) {
+          state.publishPc.setRemoteDescription({ type: 'answer', sdp: msg.sdp })
+            .then(() => flushPendingIceCandidates('publish', state.publishPc))
+            .catch(e => console.error('Failed to apply publish answer:', e));
+        }
+        break;
+
+      case 'subscribe_offer':
+        state.subscribeOfferChain = state.subscribeOfferChain
+          .then(() => handleSubscribeOffer(msg))
+          .catch(e => console.error('Failed to handle subscribe offer:', e));
+        break;
+
+      case 'ice_candidate':
+        handleIceCandidateMessage(msg);
         break;
 
       case 'participant_left':
@@ -672,9 +837,11 @@
         renderVideoGrid();
         break;
 
+      case 'chat':
       case 'chat_message':
-        state.chatMessages.push(msg.message);
-        appendChatMessage(msg.message);
+        const chatMsg = { from_name: msg.from_name, content: msg.body ?? msg.message, sent_at: msg.sent_at };
+        state.chatMessages.push(chatMsg);
+        appendChatMessage(chatMsg);
         if (els.sideDrawer.style.display === 'none' || !els.drawerChat.classList.contains('active')) {
           state.unreadChat++;
           els.chatUnreadBadge.textContent = state.unreadChat;
@@ -779,7 +946,7 @@
 
     els.headerMeetingInfo.style.display = 'flex';
     els.roomTitleDisplay.textContent = state.meeting?.title || 'Meeting Room';
-    els.roomCodeDisplay.textContent = `CODE: ${state.meeting?.join_code || '------'}`;
+    els.roomCodeDisplay.textContent = `CODE: ${state.meeting?.joinCode || '------'}`;
     els.dockSecurityBtn.style.display = state.user.role === 'host' ? 'flex' : 'none';
     els.rosterHostTabs.style.display = state.user.role === 'host' ? 'flex' : 'none';
 
@@ -799,6 +966,7 @@
       state.ws.close();
       state.ws = null;
     }
+    closeMediaConnections();
     clearInterval(state.pingInterval);
     stopSpeechRecognition();
     state.activeCaptions.forEach(c => clearTimeout(c.timeoutId));
@@ -833,7 +1001,7 @@
 
     // 3. Remote participant tiles
     state.roster.forEach(p => {
-      const tile = createVideoTile(p.display_name, false, null, p.id);
+      const tile = createVideoTile(p.display_name, false, state.remoteStreams.get(p.id) || null, p.id);
       els.videoGrid.appendChild(tile);
     });
 

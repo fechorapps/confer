@@ -28,4 +28,8 @@ recordings/
 *.log
 .DS_Store
 Thumbs.db
+TestResults/
+src/api/confer.db
+src/api/confer.db-shm
+src/api/confer.db-wal
 

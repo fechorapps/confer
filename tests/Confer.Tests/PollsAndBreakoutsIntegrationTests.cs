@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Net.WebSockets;
 using System.Text;
@@ -142,7 +143,8 @@ public class PollsAndBreakoutsIntegrationTests : IClassFixture<WebApplicationFac
         var bobPollClosedMsg = await ReceiveMessageOfTypeAsync(bobWs, "poll_closed");
         bobPollClosedMsg["poll_id"]?.GetValue<string>().Should().Be(pollDto.Id.ToString());
 
-        // 11. Host Creates Breakout Rooms with assignment for Bob
+        // 11. Host Creates Breakout Rooms with assignment for Bob (moderation action: requires host's own bearer token)
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", hostAuth.Token);
         var createBreakoutsReq = new MeetingsEndpoint.CreateBreakoutsRequest(
             hostAuth.UserId,
             2,

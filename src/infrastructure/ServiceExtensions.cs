@@ -42,6 +42,9 @@ public static class ServiceExtensions
         services.AddSingleton<WebSocketSignalingHandler>();
         services.AddSingleton<ISignalingNotifier>(sp => sp.GetRequiredService<WebSocketSignalingHandler>());
 
+        // ICE servers (STUN + TURN) shared by clients and server-side peer connections
+        services.AddSingleton<IIceServerProvider, ConfigurationIceServerProvider>();
+
         // SFU Room Manager
         services.AddSingleton<ISfuRoomManager, SfuRoomManager>();
 

@@ -73,8 +73,18 @@ autoscaling:
   targetMemoryUtilizationPercentage: 80
 
 # Application Configuration & Secrets
+#
+# The values below are intentionally non-functional placeholders, not real secrets — this
+# chart must never be installed with its defaults. Override every one of them at install/
+# upgrade time, e.g.:
+#   helm install confer ./deploy/helm/confer \
+#     --set config.jwtSecret="$(openssl rand -base64 32)" \
+#     --set postgresql.password="$(openssl rand -base64 24)" \
+#     --set coturn.staticAuthSecret="$(openssl rand -base64 24)"
+# or, preferably, reference an existing Kubernetes Secret/External Secret instead of passing
+# plaintext values through Helm at all.
 config:
-  jwtSecret: "confer-super-secret-key-change-in-production-min-32-chars-length"
+  jwtSecret: "CHANGE_ME__SET_VIA_--set_OR_A_KUBERNETES_SECRET__MIN_32_CHARS"
   jwtIssuer: "confer.server"
   jwtAudience: "confer.clients"
   environment: "Production"
@@ -86,7 +96,7 @@ postgresql:
   port: 5432
   database: "confer_db"
   username: "confer_user"
-  password: "change-this-password-in-prod"
+  password: "CHANGE_ME__SET_VIA_--set_OR_A_KUBERNETES_SECRET"
 
 # Distributed Presence & Caching (Redis)
 redis:
@@ -103,7 +113,7 @@ coturn:
     repository: coturn/coturn
     tag: 4.6.3-alpine
   realm: "turn.confer.local"
-  staticAuthSecret: "confer-turn-shared-secret-key"
+  staticAuthSecret: "CHANGE_ME__SET_VIA_--set_OR_A_KUBERNETES_SECRET"
   minPort: 49152
   maxPort: 49252
   service:

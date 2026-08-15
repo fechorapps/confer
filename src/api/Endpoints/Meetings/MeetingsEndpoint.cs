@@ -32,6 +32,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using System.IdentityModel.Tokens.Jwt;
 
 namespace Confer.Api.Endpoints.Meetings;
 
@@ -42,14 +43,21 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
         var group = app.MapGroup("/api/meetings")
             .WithTags("Meetings");
 
+        // NOTE on authorization scope: this is the first security pass over this endpoint
+        // group. Destructive/moderation actions (lock, recording, live-stream, waiting-room,
+        // policies, breakouts) require a valid bearer token AND that the caller's own
+        // identity (JWT `sub`) matches the ActorId/CreatorId asserted in the request body —
+        // see EnsureActorAuthorized below. Create/join/read endpoints remain anonymous for
+        // now to match how the web/desktop/mobile clients currently call them; broadening
+        // authorization to those is tracked as a follow-up once those flows carry tokens too.
         group.MapPost("/", CreateMeeting).WithName("CreateMeeting");
         group.MapGet("/{code}", GetMeetingByCode).WithName("GetMeetingByCode");
         group.MapPost("/{id:guid}/join", JoinMeeting).WithName("JoinMeeting");
-        group.MapPost("/{id:guid}/lock", LockMeeting).WithName("LockMeeting");
-        group.MapPost("/{id:guid}/recording/start", StartRecording).WithName("StartRecording");
-        group.MapPost("/{id:guid}/recordings/start", StartRecording).WithName("StartRecordingAlias");
-        group.MapPost("/{id:guid}/recording/stop", StopRecording).WithName("StopRecording");
-        group.MapPost("/{id:guid}/recordings/stop", StopRecording).WithName("StopRecordingAlias");
+        group.MapPost("/{id:guid}/lock", LockMeeting).WithName("LockMeeting").RequireAuthorization();
+        group.MapPost("/{id:guid}/recording/start", StartRecording).WithName("StartRecording").RequireAuthorization();
+        group.MapPost("/{id:guid}/recordings/start", StartRecording).WithName("StartRecordingAlias").RequireAuthorization();
+        group.MapPost("/{id:guid}/recording/stop", StopRecording).WithName("StopRecording").RequireAuthorization();
+        group.MapPost("/{id:guid}/recordings/stop", StopRecording).WithName("StopRecordingAlias").RequireAuthorization();
         group.MapGet("/{id:guid}/recordings", GetRecordings).WithName("GetRecordings");
 
         // AI Summary & Action Items
@@ -63,21 +71,21 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
         group.MapPost("/{id:guid}/polls/{pollId:guid}/close", ClosePoll).WithName("ClosePoll");
 
         // Breakout Rooms
-        group.MapPost("/{id:guid}/breakouts", CreateBreakouts).WithName("CreateBreakouts");
-        group.MapPost("/{id:guid}/breakouts/close", CloseBreakouts).WithName("CloseBreakouts");
+        group.MapPost("/{id:guid}/breakouts", CreateBreakouts).WithName("CreateBreakouts").RequireAuthorization();
+        group.MapPost("/{id:guid}/breakouts/close", CloseBreakouts).WithName("CloseBreakouts").RequireAuthorization();
 
         // Waiting Room & Governance
-        group.MapPost("/{id:guid}/waiting-room/toggle", ToggleWaitingRoom).WithName("ToggleWaitingRoom");
-        group.MapPost("/{id:guid}/waiting-room/admit", AdmitParticipant).WithName("AdmitParticipant");
-        group.MapPost("/{id:guid}/waiting-room/admit-all", AdmitAllParticipants).WithName("AdmitAllParticipants");
-        group.MapPost("/{id:guid}/waiting-room/reject", RejectParticipant).WithName("RejectParticipant");
+        group.MapPost("/{id:guid}/waiting-room/toggle", ToggleWaitingRoom).WithName("ToggleWaitingRoom").RequireAuthorization();
+        group.MapPost("/{id:guid}/waiting-room/admit", AdmitParticipant).WithName("AdmitParticipant").RequireAuthorization();
+        group.MapPost("/{id:guid}/waiting-room/admit-all", AdmitAllParticipants).WithName("AdmitAllParticipants").RequireAuthorization();
+        group.MapPost("/{id:guid}/waiting-room/reject", RejectParticipant).WithName("RejectParticipant").RequireAuthorization();
         group.MapGet("/{id:guid}/waiting-room", GetWaitingRoom).WithName("GetWaitingRoom");
-        group.MapPost("/{id:guid}/policies", UpdateMeetingPolicy).WithName("UpdateMeetingPolicy");
+        group.MapPost("/{id:guid}/policies", UpdateMeetingPolicy).WithName("UpdateMeetingPolicy").RequireAuthorization();
         group.MapGet("/{id:guid}/policies", GetMeetingPolicy).WithName("GetMeetingPolicy");
 
         // Live Streaming & RTMP Broadcast
-        group.MapPost("/{id:guid}/stream/start", StartLiveStream).WithName("StartLiveStream");
-        group.MapPost("/{id:guid}/stream/stop", StopLiveStream).WithName("StopLiveStream");
+        group.MapPost("/{id:guid}/stream/start", StartLiveStream).WithName("StartLiveStream").RequireAuthorization();
+        group.MapPost("/{id:guid}/stream/stop", StopLiveStream).WithName("StopLiveStream").RequireAuthorization();
         group.MapGet("/{id:guid}/stream", GetLiveStreamStatus).WithName("GetLiveStreamStatus");
 
         // iCalendar (.ics)
@@ -186,9 +194,12 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
     private static async Task<IResult> LockMeeting(
         Guid id,
         [FromBody] LockMeetingRequest request,
+        HttpContext httpContext,
         [FromServices] ICqrsDispatcher dispatcher,
         CancellationToken ct)
     {
+        if (EnsureActorAuthorized(httpContext, request.ActorId) is { } forbidden) return forbidden;
+
         var command = new LockMeetingCommand(id, request.ActorId, request.Lock);
         var result = await dispatcher.SendAsync(command, ct);
         return NoContentOrFailure(result);
@@ -197,9 +208,12 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
     private static async Task<IResult> StartRecording(
         Guid id,
         [FromBody] StartRecordingRequest request,
+        HttpContext httpContext,
         [FromServices] ICqrsDispatcher dispatcher,
         CancellationToken ct)
     {
+        if (EnsureActorAuthorized(httpContext, request.ActorId) is { } forbidden) return forbidden;
+
         var command = new StartRecordingCommand(id, request.ActorId);
         var result = await dispatcher.SendAsync(command, ct);
         return OkOrFailure(result);
@@ -208,9 +222,12 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
     private static async Task<IResult> StopRecording(
         Guid id,
         [FromBody] StopRecordingRequest request,
+        HttpContext httpContext,
         [FromServices] ICqrsDispatcher dispatcher,
         CancellationToken ct)
     {
+        if (EnsureActorAuthorized(httpContext, request.ActorId) is { } forbidden) return forbidden;
+
         var command = new StopRecordingCommand(id, request.ActorId);
         var result = await dispatcher.SendAsync(command, ct);
         return OkOrFailure(result);
@@ -297,9 +314,12 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
     private static async Task<IResult> CreateBreakouts(
         Guid id,
         [FromBody] CreateBreakoutsRequest request,
+        HttpContext httpContext,
         [FromServices] ICqrsDispatcher dispatcher,
         CancellationToken ct)
     {
+        if (EnsureActorAuthorized(httpContext, request.ActorId) is { } forbidden) return forbidden;
+
         var command = new CreateBreakoutsCommand(id, request.ActorId, request.RoomCount, request.MaxDurationMinutes, request.RoomNames, request.Assignments);
         var result = await dispatcher.SendAsync(command, ct);
         return OkOrFailure(result);
@@ -308,9 +328,12 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
     private static async Task<IResult> CloseBreakouts(
         Guid id,
         [FromBody] CloseBreakoutsRequest request,
+        HttpContext httpContext,
         [FromServices] ICqrsDispatcher dispatcher,
         CancellationToken ct)
     {
+        if (EnsureActorAuthorized(httpContext, request.ActorId) is { } forbidden) return forbidden;
+
         var command = new CloseBreakoutsCommand(id, request.ActorId);
         var result = await dispatcher.SendAsync(command, ct);
         return NoContentOrFailure(result);
@@ -319,9 +342,12 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
     private static async Task<IResult> ToggleWaitingRoom(
         Guid id,
         [FromBody] ToggleWaitingRoomRequest request,
+        HttpContext httpContext,
         [FromServices] ICqrsDispatcher dispatcher,
         CancellationToken ct)
     {
+        if (EnsureActorAuthorized(httpContext, request.ActorId) is { } forbidden) return forbidden;
+
         var command = new ToggleWaitingRoomCommand(id, request.ActorId, request.Enabled);
         var result = await dispatcher.SendAsync(command, ct);
         return OkOrFailure(result);
@@ -330,9 +356,12 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
     private static async Task<IResult> AdmitParticipant(
         Guid id,
         [FromBody] AdmitParticipantRequest request,
+        HttpContext httpContext,
         [FromServices] ICqrsDispatcher dispatcher,
         CancellationToken ct)
     {
+        if (EnsureActorAuthorized(httpContext, request.ActorId) is { } forbidden) return forbidden;
+
         var command = new AdmitParticipantCommand(id, request.ActorId, request.ParticipantId);
         var result = await dispatcher.SendAsync(command, ct);
         return NoContentOrFailure(result);
@@ -341,9 +370,12 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
     private static async Task<IResult> AdmitAllParticipants(
         Guid id,
         [FromBody] AdmitAllRequest request,
+        HttpContext httpContext,
         [FromServices] ICqrsDispatcher dispatcher,
         CancellationToken ct)
     {
+        if (EnsureActorAuthorized(httpContext, request.ActorId) is { } forbidden) return forbidden;
+
         var command = new AdmitAllCommand(id, request.ActorId);
         var result = await dispatcher.SendAsync(command, ct);
         return OkOrFailure(result);
@@ -352,9 +384,12 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
     private static async Task<IResult> RejectParticipant(
         Guid id,
         [FromBody] RejectParticipantRequest request,
+        HttpContext httpContext,
         [FromServices] ICqrsDispatcher dispatcher,
         CancellationToken ct)
     {
+        if (EnsureActorAuthorized(httpContext, request.ActorId) is { } forbidden) return forbidden;
+
         var command = new RejectParticipantCommand(id, request.ActorId, request.ParticipantId);
         var result = await dispatcher.SendAsync(command, ct);
         return NoContentOrFailure(result);
@@ -374,9 +409,12 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
     private static async Task<IResult> UpdateMeetingPolicy(
         Guid id,
         [FromBody] UpdateMeetingPolicyRequest request,
+        HttpContext httpContext,
         [FromServices] ICqrsDispatcher dispatcher,
         CancellationToken ct)
     {
+        if (EnsureActorAuthorized(httpContext, request.ActorId) is { } forbidden) return forbidden;
+
         var command = new UpdateMeetingPolicyCommand(id, request.ActorId, request.Policy, request.IsWatermarkEnabled, request.IsWaitingRoomEnabled);
         var result = await dispatcher.SendAsync(command, ct);
         return OkOrFailure(result);
@@ -395,9 +433,12 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
     private static async Task<IResult> StartLiveStream(
         Guid id,
         [FromBody] StartLiveStreamRequest request,
+        HttpContext httpContext,
         [FromServices] ICqrsDispatcher dispatcher,
         CancellationToken ct)
     {
+        if (EnsureActorAuthorized(httpContext, request.ActorId) is { } forbidden) return forbidden;
+
         var command = new StartLiveStreamCommand(id, request.ActorId, request.RtmpUrl, request.StreamKey);
         var result = await dispatcher.SendAsync(command, ct);
         return OkOrFailure(result);
@@ -406,9 +447,12 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
     private static async Task<IResult> StopLiveStream(
         Guid id,
         [FromBody] StopLiveStreamRequest request,
+        HttpContext httpContext,
         [FromServices] ICqrsDispatcher dispatcher,
         CancellationToken ct)
     {
+        if (EnsureActorAuthorized(httpContext, request.ActorId) is { } forbidden) return forbidden;
+
         var command = new StopLiveStreamCommand(id, request.ActorId);
         var result = await dispatcher.SendAsync(command, ct);
         return OkOrFailure(result);
@@ -446,6 +490,23 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
         var icsContent = calendarService.GenerateMeetingIcs(meeting, organizer, baseUrl);
 
         return Results.Content(icsContent, "text/calendar; charset=utf-8");
+    }
+
+    /// <summary>
+    /// Verifies the authenticated caller (JWT `sub` claim) is the same identity as the
+    /// ActorId/CreatorId asserted in the request body, so a valid token for user A cannot be
+    /// used to moderate a meeting while claiming to be user B. Returns a 403 IResult to short-
+    /// circuit the handler on mismatch, or null when the caller is who they claim to be.
+    /// </summary>
+    private static IResult? EnsureActorAuthorized(HttpContext httpContext, Guid actorId)
+    {
+        var sub = httpContext.User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        if (!Guid.TryParse(sub, out var callerId) || callerId != actorId)
+        {
+            return TypedResults.Forbid();
+        }
+
+        return null;
     }
 
     private static IResult HandleFailure(Confer.Shared.Results.Error error) =>

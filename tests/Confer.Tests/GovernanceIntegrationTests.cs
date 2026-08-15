@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Net.WebSockets;
 using System.Text;
@@ -134,6 +135,8 @@ public class GovernanceIntegrationTests : IClassFixture<WebApplicationFactory<Pr
             IsWatermarkEnabled: true,
             IsWaitingRoomEnabled: true);
 
+        // Moderation actions from here on require the host's own bearer token.
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", hostAuth.Token);
         var updatePolicyResp = await _client.PostAsJsonAsync($"/api/meetings/{createdMeeting.Id}/policies", updatePolicyReq);
         updatePolicyResp.StatusCode.Should().Be(HttpStatusCode.OK);
 

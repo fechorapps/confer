@@ -14,6 +14,7 @@ public interface ISignalingNotifier
     Task BroadcastMeetingEndedAsync(Guid meetingId, string reason);
     Task BroadcastRecordingStateAsync(Guid meetingId, bool isRecording, Guid? recordingId = null);
     Task SendSubscribeOfferAsync(Guid meetingId, Guid participantId, string sdpOffer, List<TrackMappingDto> mappings);
+    Task SendIceCandidateAsync(Guid meetingId, Guid participantId, string target, IceCandidateDto candidate);
     Task BroadcastPollCreatedAsync(Guid meetingId, PollDto poll);
     Task BroadcastPollUpdatedAsync(Guid meetingId, PollDto poll);
     Task BroadcastPollClosedAsync(Guid meetingId, Guid pollId);

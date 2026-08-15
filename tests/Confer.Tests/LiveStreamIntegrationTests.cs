@@ -1,5 +1,7 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Confer.Api.Endpoints.Auth;
 using Confer.Api.Endpoints.Meetings;
 using Confer.Application.DTOs;
 using FluentAssertions;
@@ -18,11 +20,24 @@ public class LiveStreamIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         _client = factory.CreateClient();
     }
 
+    private async Task<AuthEndpoint.DevLoginResponse> DevLoginAsync(string email, string displayName)
+    {
+        var response = await _client.PostAsJsonAsync("/api/auth/dev-login", new AuthEndpoint.DevLoginRequest(email, displayName));
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var auth = await response.Content.ReadFromJsonAsync<AuthEndpoint.DevLoginResponse>();
+        auth.Should().NotBeNull();
+        return auth!;
+    }
+
+    private void AuthorizeAs(AuthEndpoint.DevLoginResponse actor) =>
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", actor.Token);
+
     [Fact]
     public async Task LiveStreamLifecycle_StartStopAndQuery_ShouldSucceed()
     {
-        // 1. Create meeting
-        var ownerId = Guid.NewGuid();
+        // 1. Log in the owner and create the meeting
+        var owner = await DevLoginAsync("livestream_owner@confer.local", "LiveStream Owner");
+        var ownerId = owner.UserId;
         var createRequest = new MeetingsEndpoint.CreateMeetingRequest("Global Developers Conference", ownerId, 100);
         var createResponse = await _client.PostAsJsonAsync("/api/meetings", createRequest);
         createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -42,6 +57,7 @@ public class LiveStreamIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         var rtmpUrl = "rtmp://live.youtube.com/app";
         var streamKey = "live_test_stream_key_999";
         var startRequest = new MeetingsEndpoint.StartLiveStreamRequest(ownerId, rtmpUrl, streamKey);
+        AuthorizeAs(owner);
         var startResponse = await _client.PostAsJsonAsync($"/api/meetings/{meetingId}/stream/start", startRequest);
         startResponse.StatusCode.Should().Be(HttpStatusCode.OK);
         var startData = await startResponse.Content.ReadFromJsonAsync<LiveStreamResponse>();
@@ -123,6 +139,28 @@ public class LiveStreamIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         var stopResponse = await _client.PostAsJsonAsync($"/api/meetings/{meetingId}/stream/stop", unauthorizedStop);
 
         stopResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task StartLiveStream_ByAuthenticatedUserImpersonatingAnotherActorId_ShouldReturnForbidden()
+    {
+        // A valid, authenticated caller (attacker) must not be able to moderate a meeting by
+        // simply putting someone else's ActorId in the request body.
+        var owner = await DevLoginAsync("livestream_impersonated_owner@confer.local", "Real Owner");
+        var attacker = await DevLoginAsync("livestream_attacker@confer.local", "Attacker");
+
+        var createRequest = new MeetingsEndpoint.CreateMeetingRequest("Private Keynote", owner.UserId, 25);
+        AuthorizeAs(owner);
+        var createResponse = await _client.PostAsJsonAsync("/api/meetings", createRequest);
+        var created = await createResponse.Content.ReadFromJsonAsync<MeetingsEndpoint.CreateMeetingResponse>();
+        var meetingId = created!.Id;
+
+        // Attacker is authenticated as themselves, but claims to be the owner in the body.
+        AuthorizeAs(attacker);
+        var impersonatingRequest = new MeetingsEndpoint.StartLiveStreamRequest(owner.UserId, "rtmp://live.twitch.tv/app", "key123");
+        var startResponse = await _client.PostAsJsonAsync($"/api/meetings/{meetingId}/stream/start", impersonatingRequest);
+
+        startResponse.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]

@@ -80,6 +80,11 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
 
         await presenceService.SetParticipantOnlineAsync(meetingId, participantState);
 
+        // Register with the SFU room and pick up any tracks already being published, so a
+        // participant who joins after others are already on camera doesn't have to wait for a
+        // re-publish to see/hear them.
+        await sfuManager.JoinRoomAsync(meetingId, participantId);
+
         // Send Joined confirmation with current roster
         var roster = await presenceService.GetRosterAsync(meetingId);
         var joinedMsg = new JsonObject
@@ -174,6 +179,20 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
                 case "subscribe_answer":
                     var sdpAnswer = node["sdp"]?.GetValue<string>() ?? string.Empty;
                     await sfuManager.HandleSubscribeAnswerAsync(claims.MeetingId, claims.ParticipantId, sdpAnswer);
+                    break;
+
+                case "ice_candidate":
+                    var candidateStr = node["candidate"]?.GetValue<string>();
+                    if (!string.IsNullOrWhiteSpace(candidateStr))
+                    {
+                        var target = node["target"]?.GetValue<string>()?.ToLowerInvariant() == "subscribe" ? "subscribe" : "publish";
+                        var candidateDto = new IceCandidateDto(
+                            candidateStr,
+                            node["sdp_mid"]?.GetValue<string>(),
+                            node["sdp_mline_index"]?.GetValue<ushort>(),
+                            node["username_fragment"]?.GetValue<string>());
+                        await sfuManager.HandleIceCandidateAsync(claims.MeetingId, claims.ParticipantId, target, candidateDto);
+                    }
                     break;
 
                 case "update_viewport":
@@ -495,6 +514,24 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
                 ["type"] = "subscribe_offer",
                 ["sdp"] = sdpOffer,
                 ["mapping"] = JsonSerializer.SerializeToNode(mappings)
+            };
+            return SendJsonAsync(socket, msg);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task SendIceCandidateAsync(Guid meetingId, Guid participantId, string target, IceCandidateDto candidate)
+    {
+        if (_roomSockets.TryGetValue(meetingId, out var sockets) && sockets.TryGetValue(participantId, out var socket))
+        {
+            var msg = new JsonObject
+            {
+                ["type"] = "ice_candidate",
+                ["target"] = target,
+                ["candidate"] = candidate.Candidate,
+                ["sdp_mid"] = candidate.SdpMid,
+                ["sdp_mline_index"] = candidate.SdpMLineIndex,
+                ["username_fragment"] = candidate.UsernameFragment
             };
             return SendJsonAsync(socket, msg);
         }
