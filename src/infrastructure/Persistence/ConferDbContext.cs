@@ -15,6 +15,10 @@ public sealed class ConferDbContext(DbContextOptions<ConferDbContext> options)
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
     public DbSet<User> Users => Set<User>();
     public DbSet<MeetingRecording> Recordings => Set<MeetingRecording>();
+    public DbSet<Poll> Polls => Set<Poll>();
+    public DbSet<PollOption> PollOptions => Set<PollOption>();
+    public DbSet<PollVote> PollVotes => Set<PollVote>();
+    public DbSet<BreakoutRoom> BreakoutRooms => Set<BreakoutRoom>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -48,6 +52,16 @@ public sealed class ConferDbContext(DbContextOptions<ConferDbContext> options)
             builder.HasMany(m => m.Recordings)
                 .WithOne()
                 .HasForeignKey(r => r.MeetingId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasMany(m => m.Polls)
+                .WithOne()
+                .HasForeignKey(p => p.MeetingId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasMany(m => m.BreakoutRooms)
+                .WithOne()
+                .HasForeignKey(b => b.MeetingId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -96,6 +110,47 @@ public sealed class ConferDbContext(DbContextOptions<ConferDbContext> options)
             builder.Property(c => c.UserName).IsRequired().HasMaxLength(150);
             builder.Property(c => c.Body).IsRequired().HasMaxLength(2000);
             builder.HasIndex(c => new { c.SessionId, c.SentAt });
+        });
+
+        modelBuilder.Entity<Poll>(builder =>
+        {
+            builder.ToTable("polls");
+            builder.HasKey(p => p.Id);
+            builder.Property(p => p.Question).IsRequired().HasMaxLength(500);
+            builder.HasIndex(p => p.MeetingId);
+
+            builder.HasMany(p => p.Options)
+                .WithOne()
+                .HasForeignKey(o => o.PollId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasMany(p => p.Votes)
+                .WithOne()
+                .HasForeignKey(v => v.PollId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PollOption>(builder =>
+        {
+            builder.ToTable("poll_options");
+            builder.HasKey(o => o.Id);
+            builder.Property(o => o.Text).IsRequired().HasMaxLength(200);
+            builder.HasIndex(o => o.PollId);
+        });
+
+        modelBuilder.Entity<PollVote>(builder =>
+        {
+            builder.ToTable("poll_votes");
+            builder.HasKey(v => v.Id);
+            builder.HasIndex(v => new { v.PollId, v.VoterId });
+        });
+
+        modelBuilder.Entity<BreakoutRoom>(builder =>
+        {
+            builder.ToTable("breakout_rooms");
+            builder.HasKey(b => b.Id);
+            builder.Property(b => b.Name).IsRequired().HasMaxLength(150);
+            builder.HasIndex(b => b.MeetingId);
         });
     }
 }

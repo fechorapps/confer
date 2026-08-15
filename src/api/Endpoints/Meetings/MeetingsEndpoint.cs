@@ -1,8 +1,14 @@
+using Confer.Application.Meetings.Breakouts.CloseBreakouts;
+using Confer.Application.Meetings.Breakouts.CreateBreakouts;
 using Confer.Application.Meetings.Create;
 using Confer.Application.Meetings.GetByCode;
 using Confer.Application.Meetings.GetRecordings;
 using Confer.Application.Meetings.Join;
 using Confer.Application.Meetings.Lock;
+using Confer.Application.Meetings.Polls.ClosePoll;
+using Confer.Application.Meetings.Polls.CreatePoll;
+using Confer.Application.Meetings.Polls.GetPolls;
+using Confer.Application.Meetings.Polls.SubmitPollVote;
 using Confer.Application.Meetings.StartRecording;
 using Confer.Application.Meetings.StopRecording;
 using Confer.Shared.Api;
@@ -30,6 +36,16 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
         group.MapPost("/{id:guid}/recording/stop", StopRecording).WithName("StopRecording");
         group.MapPost("/{id:guid}/recordings/stop", StopRecording).WithName("StopRecordingAlias");
         group.MapGet("/{id:guid}/recordings", GetRecordings).WithName("GetRecordings");
+
+        // Polls
+        group.MapPost("/{id:guid}/polls", CreatePoll).WithName("CreatePoll");
+        group.MapGet("/{id:guid}/polls", GetPolls).WithName("GetPolls");
+        group.MapPost("/{id:guid}/polls/{pollId:guid}/vote", SubmitPollVote).WithName("SubmitPollVote");
+        group.MapPost("/{id:guid}/polls/{pollId:guid}/close", ClosePoll).WithName("ClosePoll");
+
+        // Breakout Rooms
+        group.MapPost("/{id:guid}/breakouts", CreateBreakouts).WithName("CreateBreakouts");
+        group.MapPost("/{id:guid}/breakouts/close", CloseBreakouts).WithName("CloseBreakouts");
     }
 
     public record CreateMeetingRequest(string Title, Guid OwnerId, int MaxParticipants = 50, string? CustomJoinCode = null);
@@ -37,6 +53,11 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
     public record LockMeetingRequest(Guid ActorId, bool Lock);
     public record StartRecordingRequest(Guid ActorId);
     public record StopRecordingRequest(Guid ActorId);
+    public record CreatePollRequest(Guid CreatorId, string Question, List<string> Options, bool IsAnonymous = false, bool IsMultiChoice = false);
+    public record SubmitPollVoteRequest(Guid VoterId, List<Guid> OptionIds);
+    public record ClosePollRequest(Guid ActorId);
+    public record CreateBreakoutsRequest(Guid ActorId, int RoomCount, int MaxDurationMinutes = 15, List<string>? RoomNames = null, List<Confer.Application.DTOs.BreakoutAssignmentDto>? Assignments = null);
+    public record CloseBreakoutsRequest(Guid ActorId);
 
     public record CreateMeetingResponse
     {
@@ -134,6 +155,75 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
         var query = new GetMeetingRecordingsQuery(id);
         var result = await dispatcher.QueryAsync(query, ct);
         return OkOrFailure(result);
+    }
+
+    private static async Task<IResult> CreatePoll(
+        Guid id,
+        [FromBody] CreatePollRequest request,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var command = new CreatePollCommand(id, request.CreatorId, request.Question, request.Options, request.IsAnonymous, request.IsMultiChoice);
+        var result = await dispatcher.SendAsync(command, ct);
+        return result.IsSuccess
+            ? TypedResults.Created($"/api/meetings/{id}/polls/{result.Value.Id}", result.Value)
+            : HandleFailure(result.Error);
+    }
+
+    private static async Task<IResult> GetPolls(
+        Guid id,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var query = new GetPollsQuery(id);
+        var result = await dispatcher.QueryAsync(query, ct);
+        return OkOrFailure(result);
+    }
+
+    private static async Task<IResult> SubmitPollVote(
+        Guid id,
+        Guid pollId,
+        [FromBody] SubmitPollVoteRequest request,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var command = new SubmitPollVoteCommand(id, pollId, request.VoterId, request.OptionIds);
+        var result = await dispatcher.SendAsync(command, ct);
+        return OkOrFailure(result);
+    }
+
+    private static async Task<IResult> ClosePoll(
+        Guid id,
+        Guid pollId,
+        [FromBody] ClosePollRequest request,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var command = new ClosePollCommand(id, pollId, request.ActorId);
+        var result = await dispatcher.SendAsync(command, ct);
+        return OkOrFailure(result);
+    }
+
+    private static async Task<IResult> CreateBreakouts(
+        Guid id,
+        [FromBody] CreateBreakoutsRequest request,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var command = new CreateBreakoutsCommand(id, request.ActorId, request.RoomCount, request.MaxDurationMinutes, request.RoomNames, request.Assignments);
+        var result = await dispatcher.SendAsync(command, ct);
+        return OkOrFailure(result);
+    }
+
+    private static async Task<IResult> CloseBreakouts(
+        Guid id,
+        [FromBody] CloseBreakoutsRequest request,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var command = new CloseBreakoutsCommand(id, request.ActorId);
+        var result = await dispatcher.SendAsync(command, ct);
+        return NoContentOrFailure(result);
     }
 
     private static IResult HandleFailure(Confer.Shared.Results.Error error) =>

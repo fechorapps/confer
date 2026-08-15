@@ -92,14 +92,18 @@ fun MeetingScreen(
                 isCameraOff = state.isCameraOff,
                 isScreenSharing = state.isScreenSharing,
                 isHandRaised = state.isHandRaised,
+                isWhiteboardActive = state.isWhiteboardActive,
                 unreadChatCount = state.unreadChatCount,
+                unreadPollCount = state.unreadPollCount,
                 onToggleMic = { viewModel.toggleMic() },
                 onToggleCamera = { viewModel.toggleCamera() },
                 onFlipCamera = { viewModel.flipCamera() },
                 onToggleScreenShare = { viewModel.toggleScreenShare() },
+                onToggleWhiteboard = { viewModel.toggleWhiteboard() },
                 onToggleHandRaise = { viewModel.toggleHandRaise() },
                 onSendReaction = { viewModel.sendReaction(it) },
                 onOpenChat = { viewModel.showChat(true) },
+                onOpenPolls = { viewModel.showPolls(true) },
                 onOpenRoster = { viewModel.showRoster(true) },
                 onOpenDiagnostics = { viewModel.showDiagnostics(true) },
                 onLeaveMeeting = {
@@ -109,6 +113,19 @@ fun MeetingScreen(
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
 
+            // Collaborative Whiteboard Overlay
+            if (state.isWhiteboardActive) {
+                WhiteboardCanvas(
+                    strokes = state.whiteboardStrokes,
+                    myParticipantId = state.myParticipantId,
+                    onDrawStroke = { viewModel.sendWhiteboardStroke(it) },
+                    onUndo = { viewModel.undoWhiteboard() },
+                    onClear = { viewModel.clearWhiteboard() },
+                    onClose = { viewModel.showWhiteboard(false) },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
             // Chat Bottom Sheet
             if (state.showChatSheet) {
                 ChatBottomSheet(
@@ -116,6 +133,19 @@ fun MeetingScreen(
                     myParticipantId = state.myParticipantId,
                     onSendMessage = { viewModel.sendChat(it) },
                     onDismiss = { viewModel.showChat(false) }
+                )
+            }
+
+            // Polls Bottom Sheet
+            if (state.showPollsSheet) {
+                PollsBottomSheet(
+                    polls = state.polls,
+                    myParticipantId = state.myParticipantId,
+                    isHost = state.myRole == "host",
+                    onCreatePoll = { question, options -> viewModel.createPoll(question, options) },
+                    onVote = { pollId, optionId -> viewModel.votePoll(pollId, optionId) },
+                    onEndPoll = { pollId -> viewModel.endPoll(pollId) },
+                    onDismiss = { viewModel.showPolls(false) }
                 )
             }
 

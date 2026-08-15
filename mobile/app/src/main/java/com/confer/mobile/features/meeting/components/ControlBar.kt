@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Poll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,14 +25,18 @@ fun ControlBar(
     isCameraOff: Boolean,
     isScreenSharing: Boolean,
     isHandRaised: Boolean,
-    unreadChatCount: Int,
+    isWhiteboardActive: Boolean = false,
+    unreadChatCount: Int = 0,
+    unreadPollCount: Int = 0,
     onToggleMic: () -> Unit,
     onToggleCamera: () -> Unit,
     onFlipCamera: () -> Unit,
     onToggleScreenShare: () -> Unit,
+    onToggleWhiteboard: () -> Unit,
     onToggleHandRaise: () -> Unit,
     onSendReaction: (String) -> Unit,
     onOpenChat: () -> Unit,
+    onOpenPolls: () -> Unit,
     onOpenRoster: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onLeaveMeeting: () -> Unit,
@@ -93,6 +98,20 @@ fun ControlBar(
                 Icon(Icons.Default.ScreenShare, contentDescription = "Screen Share", tint = if (isScreenSharing) BackgroundDark else Color.White)
             }
 
+            // Whiteboard Toggle
+            IconButton(
+                onClick = onToggleWhiteboard,
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = if (isWhiteboardActive) PrimaryCyan else SurfaceVariantDark
+                )
+            ) {
+                Icon(
+                    Icons.Default.Draw,
+                    contentDescription = "Whiteboard",
+                    tint = if (isWhiteboardActive) BackgroundDark else Color.White
+                )
+            }
+
             // Hand Raise
             IconButton(
                 onClick = onToggleHandRaise,
@@ -147,6 +166,24 @@ fun ControlBar(
                 }
             }
 
+            // Polls Drawer Toggle (with Badge)
+            BadgedBox(
+                badge = {
+                    if (unreadPollCount > 0) {
+                        Badge(containerColor = AccentGreen) {
+                            Text(unreadPollCount.toString(), color = BackgroundDark)
+                        }
+                    }
+                }
+            ) {
+                IconButton(
+                    onClick = onOpenPolls,
+                    colors = IconButtonDefaults.iconButtonColors(containerColor = SurfaceVariantDark)
+                ) {
+                    Icon(Icons.Outlined.Poll, contentDescription = "Polls", tint = Color.White)
+                }
+            }
+
             // Participants Roster
             IconButton(
                 onClick = onOpenRoster,
@@ -175,3 +212,4 @@ fun ControlBar(
         }
     }
 }
+

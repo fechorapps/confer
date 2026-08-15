@@ -13,6 +13,10 @@ public interface IConferDbContext
     DbSet<ChatMessage> ChatMessages { get; }
     DbSet<User> Users { get; }
     DbSet<MeetingRecording> Recordings { get; }
+    DbSet<Poll> Polls { get; }
+    DbSet<PollOption> PollOptions { get; }
+    DbSet<PollVote> PollVotes { get; }
+    DbSet<BreakoutRoom> BreakoutRooms { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

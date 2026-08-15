@@ -29,8 +29,13 @@ data class MeetingUiState(
     val chatMessages: List<ChatMessage> = emptyList(),
     val unreadChatCount: Int = 0,
     val activeReactions: List<ActiveReactionItem> = emptyList(),
+    val polls: List<Poll> = emptyList(),
+    val unreadPollCount: Int = 0,
+    val whiteboardStrokes: List<WhiteboardStroke> = emptyList(),
+    val isWhiteboardActive: Boolean = false,
     val showChatSheet: Boolean = false,
     val showRosterSheet: Boolean = false,
+    val showPollsSheet: Boolean = false,
     val showDiagnostics: Boolean = false,
     val rttMs: Long = 32,
     val packetLossPct: Float = 0.0f
@@ -129,6 +134,56 @@ class MeetingViewModel : ViewModel() {
                     is ServerMessage.MeetingLocked -> {
                         _uiState.update { it.copy(isLocked = msg.isLocked) }
                     }
+                    is ServerMessage.PollCreated -> {
+                        _uiState.update { state ->
+                            val exists = state.polls.any { it.id == msg.poll.id }
+                            val updatedPolls = if (exists) {
+                                state.polls.map { if (it.id == msg.poll.id) msg.poll else it }
+                            } else {
+                                state.polls + msg.poll
+                            }
+                            val newUnread = if (state.showPollsSheet) 0 else state.unreadPollCount + 1
+                            state.copy(polls = updatedPolls, unreadPollCount = newUnread)
+                        }
+                    }
+                    is ServerMessage.PollUpdated -> {
+                        _uiState.update { state ->
+                            val updatedPolls = state.polls.map { current ->
+                                if (current.id == msg.poll.id) {
+                                    msg.poll.copy(votedOptionId = current.votedOptionId ?: msg.poll.votedOptionId)
+                                } else current
+                            }
+                            state.copy(polls = updatedPolls)
+                        }
+                    }
+                    is ServerMessage.PollEnded -> {
+                        _uiState.update { state ->
+                            val updatedPolls = state.polls.map { current ->
+                                if (current.id == msg.pollId) current.copy(isActive = false) else current
+                            }
+                            state.copy(polls = updatedPolls)
+                        }
+                    }
+                    is ServerMessage.WhiteboardDraw -> {
+                        _uiState.update { state ->
+                            if (state.whiteboardStrokes.none { it.id == msg.stroke.id }) {
+                                state.copy(whiteboardStrokes = state.whiteboardStrokes + msg.stroke)
+                            } else state
+                        }
+                    }
+                    is ServerMessage.WhiteboardClear -> {
+                        _uiState.update { it.copy(whiteboardStrokes = emptyList()) }
+                    }
+                    is ServerMessage.WhiteboardUndo -> {
+                        _uiState.update { state ->
+                            val updatedStrokes = if (msg.strokeId != null) {
+                                state.whiteboardStrokes.filter { it.id != msg.strokeId }
+                            } else {
+                                state.whiteboardStrokes.dropLast(1)
+                            }
+                            state.copy(whiteboardStrokes = updatedStrokes)
+                        }
+                    }
                     else -> {}
                 }
             }
@@ -184,6 +239,91 @@ class MeetingViewModel : ViewModel() {
         }
     }
 
+    fun createPoll(question: String, options: List<String>) {
+        if (question.isBlank() || options.size < 2) return
+        val pollId = UUID.randomUUID().toString()
+        val pollOptions = options.mapIndexed { idx, text ->
+            PollOption(id = "opt_${pollId}_$idx", text = text, voteCount = 0)
+        }
+        val newPoll = Poll(
+            id = pollId,
+            question = question,
+            options = pollOptions,
+            createdBy = _uiState.value.myParticipantId,
+            createdByName = _uiState.value.myDisplayName,
+            isActive = true,
+            votedOptionId = null,
+            totalVotes = 0
+        )
+        _uiState.update { it.copy(polls = it.polls + newPoll) }
+        viewModelScope.launch {
+            signalingClient?.sendMessage(ClientMessage.CreatePoll(question, options, pollId = pollId))
+        }
+    }
+
+    fun votePoll(pollId: String, optionId: String) {
+        _uiState.update { state ->
+            val updated = state.polls.map { poll ->
+                if (poll.id == pollId) {
+                    val updatedOptions = poll.options.map { opt ->
+                        if (opt.id == optionId) opt.copy(voteCount = opt.voteCount + 1) else opt
+                    }
+                    poll.copy(
+                        options = updatedOptions,
+                        votedOptionId = optionId,
+                        totalVotes = poll.totalVotes + 1
+                    )
+                } else poll
+            }
+            state.copy(polls = updated)
+        }
+        viewModelScope.launch {
+            signalingClient?.sendMessage(ClientMessage.VotePoll(pollId, optionId))
+        }
+    }
+
+    fun endPoll(pollId: String) {
+        _uiState.update { state ->
+            val updated = state.polls.map { poll ->
+                if (poll.id == pollId) poll.copy(isActive = false) else poll
+            }
+            state.copy(polls = updated)
+        }
+        viewModelScope.launch {
+            signalingClient?.sendMessage(ClientMessage.EndPoll(pollId))
+        }
+    }
+
+    fun toggleWhiteboard() {
+        _uiState.update { it.copy(isWhiteboardActive = !it.isWhiteboardActive) }
+    }
+
+    fun showWhiteboard(show: Boolean) {
+        _uiState.update { it.copy(isWhiteboardActive = show) }
+    }
+
+    fun sendWhiteboardStroke(stroke: WhiteboardStroke) {
+        _uiState.update { it.copy(whiteboardStrokes = it.whiteboardStrokes + stroke) }
+        viewModelScope.launch {
+            signalingClient?.sendMessage(ClientMessage.WhiteboardDraw(stroke))
+        }
+    }
+
+    fun clearWhiteboard() {
+        _uiState.update { it.copy(whiteboardStrokes = emptyList()) }
+        viewModelScope.launch {
+            signalingClient?.sendMessage(ClientMessage.WhiteboardClear())
+        }
+    }
+
+    fun undoWhiteboard() {
+        val lastStroke = _uiState.value.whiteboardStrokes.lastOrNull()
+        _uiState.update { it.copy(whiteboardStrokes = it.whiteboardStrokes.dropLast(1)) }
+        viewModelScope.launch {
+            signalingClient?.sendMessage(ClientMessage.WhiteboardUndo(lastStroke?.id))
+        }
+    }
+
     fun hostMute(participantId: String) {
         viewModelScope.launch {
             signalingClient?.sendMessage(ClientMessage.HostAction("mute", participantId))
@@ -198,6 +338,10 @@ class MeetingViewModel : ViewModel() {
 
     fun showChat(show: Boolean) {
         _uiState.update { it.copy(showChatSheet = show, unreadChatCount = if (show) 0 else it.unreadChatCount) }
+    }
+
+    fun showPolls(show: Boolean) {
+        _uiState.update { it.copy(showPollsSheet = show, unreadPollCount = if (show) 0 else it.unreadPollCount) }
     }
 
     fun showRoster(show: Boolean) {

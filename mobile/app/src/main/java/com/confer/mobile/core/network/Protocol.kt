@@ -46,6 +46,42 @@ data class ChatMessage(
 )
 
 @Serializable
+data class PollOption(
+    val id: String,
+    val text: String,
+    @SerialName("vote_count") val voteCount: Int = 0
+)
+
+@Serializable
+data class Poll(
+    val id: String,
+    val question: String,
+    val options: List<PollOption>,
+    @SerialName("created_by") val createdBy: String,
+    @SerialName("created_by_name") val createdByName: String = "",
+    @SerialName("is_active") val isActive: Boolean = true,
+    @SerialName("voted_option_id") val votedOptionId: String? = null,
+    @SerialName("total_votes") val totalVotes: Int = 0
+)
+
+@Serializable
+data class WhiteboardPoint(
+    val x: Float,
+    val y: Float,
+    val pressure: Float = 1.0f
+)
+
+@Serializable
+data class WhiteboardStroke(
+    val id: String,
+    @SerialName("participant_id") val participantId: String = "",
+    val points: List<WhiteboardPoint>,
+    val color: String = "#38BDF8",
+    @SerialName("stroke_width") val strokeWidth: Float = 4.0f,
+    @SerialName("is_eraser") val isEraser: Boolean = false
+)
+
+@Serializable
 sealed class ClientMessage {
     @Serializable
     @SerialName("publish")
@@ -87,6 +123,45 @@ sealed class ClientMessage {
     @Serializable
     @SerialName("ping")
     data class Ping(val seq: Long) : ClientMessage()
+
+    @Serializable
+    @SerialName("create_poll")
+    data class CreatePoll(
+        val question: String,
+        val options: List<String>,
+        @SerialName("poll_id") val pollId: String = ""
+    ) : ClientMessage()
+
+    @Serializable
+    @SerialName("vote_poll")
+    data class VotePoll(
+        @SerialName("poll_id") val pollId: String,
+        @SerialName("option_id") val optionId: String
+    ) : ClientMessage()
+
+    @Serializable
+    @SerialName("end_poll")
+    data class EndPoll(
+        @SerialName("poll_id") val pollId: String
+    ) : ClientMessage()
+
+    @Serializable
+    @SerialName("whiteboard_draw")
+    data class WhiteboardDraw(
+        val stroke: WhiteboardStroke
+    ) : ClientMessage()
+
+    @Serializable
+    @SerialName("whiteboard_clear")
+    data class WhiteboardClear(
+        val reason: String = ""
+    ) : ClientMessage()
+
+    @Serializable
+    @SerialName("whiteboard_undo")
+    data class WhiteboardUndo(
+        @SerialName("stroke_id") val strokeId: String? = null
+    ) : ClientMessage()
 }
 
 @Serializable
@@ -157,4 +232,29 @@ sealed class ServerMessage {
     @Serializable
     @SerialName("pong")
     data class Pong(val seq: Long) : ServerMessage()
+
+    @Serializable
+    @SerialName("poll_created")
+    data class PollCreated(val poll: Poll) : ServerMessage()
+
+    @Serializable
+    @SerialName("poll_updated")
+    data class PollUpdated(val poll: Poll) : ServerMessage()
+
+    @Serializable
+    @SerialName("poll_ended")
+    data class PollEnded(@SerialName("poll_id") val pollId: String) : ServerMessage()
+
+    @Serializable
+    @SerialName("whiteboard_draw")
+    data class WhiteboardDraw(val stroke: WhiteboardStroke) : ServerMessage()
+
+    @Serializable
+    @SerialName("whiteboard_clear")
+    data class WhiteboardClear(val reason: String = "") : ServerMessage()
+
+    @Serializable
+    @SerialName("whiteboard_undo")
+    data class WhiteboardUndo(@SerialName("stroke_id") val strokeId: String? = null) : ServerMessage()
 }
+

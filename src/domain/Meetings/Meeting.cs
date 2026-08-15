@@ -20,6 +20,8 @@ public sealed class Meeting
 
     public ICollection<Session> Sessions { get; private set; } = new List<Session>();
     public ICollection<MeetingRecording> Recordings { get; private set; } = new List<MeetingRecording>();
+    public ICollection<Poll> Polls { get; private set; } = new List<Poll>();
+    public ICollection<BreakoutRoom> BreakoutRooms { get; private set; } = new List<BreakoutRoom>();
 
     private Meeting() { }
 

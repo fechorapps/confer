@@ -60,6 +60,18 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                         app.toggle_hand_raise();
                     }
 
+                    // Whiteboard Toggle
+                    let wb_bg = if app.is_whiteboard_active { Color32::from_rgb(2, 132, 199) } else { Color32::from_rgb(26, 29, 33) };
+                    if ui.add(egui::Button::new(RichText::new("🖌 Whiteboard").size(12.0).color(Color32::WHITE)).fill(wb_bg).rounding(18.0)).clicked() {
+                        app.toggle_whiteboard();
+                    }
+
+                    // Polls Toggle
+                    let polls_bg = if app.show_polls { Color32::from_rgb(2, 132, 199) } else { Color32::from_rgb(26, 29, 33) };
+                    if ui.add(egui::Button::new(RichText::new("📊 Polls").size(12.0).color(Color32::WHITE)).fill(polls_bg).rounding(18.0)).clicked() {
+                        app.toggle_polls();
+                    }
+
                     // Filters Dropdown
                     ui.menu_button(RichText::new("🎨 Filters").size(12.0).color(Color32::WHITE), |ui| {
                         ui.set_min_width(160.0);

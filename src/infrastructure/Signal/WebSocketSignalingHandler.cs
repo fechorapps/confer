@@ -305,6 +305,54 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
         return Task.CompletedTask;
     }
 
+    public Task BroadcastPollCreatedAsync(Guid meetingId, PollDto poll) =>
+        BroadcastToRoomAsync(meetingId, new JsonObject
+        {
+            ["type"] = "poll_created",
+            ["poll"] = JsonSerializer.SerializeToNode(poll)
+        });
+
+    public Task BroadcastPollUpdatedAsync(Guid meetingId, PollDto poll) =>
+        BroadcastToRoomAsync(meetingId, new JsonObject
+        {
+            ["type"] = "poll_updated",
+            ["poll"] = JsonSerializer.SerializeToNode(poll)
+        });
+
+    public Task BroadcastPollClosedAsync(Guid meetingId, Guid pollId) =>
+        BroadcastToRoomAsync(meetingId, new JsonObject
+        {
+            ["type"] = "poll_closed",
+            ["poll_id"] = pollId.ToString()
+        });
+
+    public Task BroadcastBreakoutInviteAsync(Guid meetingId, Guid participantId, BreakoutInviteDto invite)
+    {
+        if (participantId == Guid.Empty)
+        {
+            return BroadcastToRoomAsync(meetingId, new JsonObject
+            {
+                ["type"] = "breakout_invite",
+                ["breakout_room_id"] = invite.BreakoutRoomId.ToString(),
+                ["room_name"] = invite.RoomName,
+                ["session_id"] = invite.SessionId.ToString()
+            });
+        }
+
+        if (_roomSockets.TryGetValue(meetingId, out var sockets) && sockets.TryGetValue(participantId, out var socket))
+        {
+            var msg = new JsonObject
+            {
+                ["type"] = "breakout_invite",
+                ["breakout_room_id"] = invite.BreakoutRoomId.ToString(),
+                ["room_name"] = invite.RoomName,
+                ["session_id"] = invite.SessionId.ToString()
+            };
+            return SendJsonAsync(socket, msg);
+        }
+        return Task.CompletedTask;
+    }
+
     private async Task BroadcastToRoomAsync(Guid meetingId, JsonObject json, Guid? excludeParticipantId = null)
     {
         if (_roomSockets.TryGetValue(meetingId, out var sockets))

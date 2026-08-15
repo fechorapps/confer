@@ -33,6 +33,58 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<ConferDbContext>();
     await db.Database.EnsureCreatedAsync();
 
+    if (db.Database.IsSqlite())
+    {
+        await db.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS ""polls"" (
+                ""Id"" TEXT NOT NULL PRIMARY KEY,
+                ""MeetingId"" TEXT NOT NULL,
+                ""CreatorId"" TEXT NOT NULL,
+                ""Question"" TEXT NOT NULL,
+                ""IsAnonymous"" INTEGER NOT NULL,
+                ""IsMultiChoice"" INTEGER NOT NULL,
+                ""IsActive"" INTEGER NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""ClosedAt"" TEXT NULL,
+                CONSTRAINT ""FK_polls_meetings_MeetingId"" FOREIGN KEY (""MeetingId"") REFERENCES ""meetings"" (""Id"") ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS ""IX_polls_MeetingId"" ON ""polls"" (""MeetingId"");
+
+            CREATE TABLE IF NOT EXISTS ""poll_options"" (
+                ""Id"" TEXT NOT NULL PRIMARY KEY,
+                ""PollId"" TEXT NOT NULL,
+                ""Text"" TEXT NOT NULL,
+                ""Index"" INTEGER NOT NULL,
+                ""VoteCount"" INTEGER NOT NULL,
+                CONSTRAINT ""FK_poll_options_polls_PollId"" FOREIGN KEY (""PollId"") REFERENCES ""polls"" (""Id"") ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS ""IX_poll_options_PollId"" ON ""poll_options"" (""PollId"");
+
+            CREATE TABLE IF NOT EXISTS ""poll_votes"" (
+                ""Id"" TEXT NOT NULL PRIMARY KEY,
+                ""PollId"" TEXT NOT NULL,
+                ""OptionId"" TEXT NOT NULL,
+                ""VoterId"" TEXT NOT NULL,
+                ""VotedAt"" TEXT NOT NULL,
+                CONSTRAINT ""FK_poll_votes_polls_PollId"" FOREIGN KEY (""PollId"") REFERENCES ""polls"" (""Id"") ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS ""IX_poll_votes_PollId_VoterId"" ON ""poll_votes"" (""PollId"", ""VoterId"");
+
+            CREATE TABLE IF NOT EXISTS ""breakout_rooms"" (
+                ""Id"" TEXT NOT NULL PRIMARY KEY,
+                ""MeetingId"" TEXT NOT NULL,
+                ""SessionId"" TEXT NOT NULL,
+                ""Name"" TEXT NOT NULL,
+                ""Index"" INTEGER NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""EndsAt"" TEXT NULL,
+                ""MaxDurationMinutes"" INTEGER NOT NULL,
+                CONSTRAINT ""FK_breakout_rooms_meetings_MeetingId"" FOREIGN KEY (""MeetingId"") REFERENCES ""meetings"" (""Id"") ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS ""IX_breakout_rooms_MeetingId"" ON ""breakout_rooms"" (""MeetingId"");
+        ");
+    }
+
     if (!await db.Users.AnyAsync())
     {
         db.Users.AddRange(

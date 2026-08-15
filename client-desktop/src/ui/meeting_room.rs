@@ -1,7 +1,7 @@
 use egui::{Color32, Pos2, Rect, RichText, Stroke, TextureHandle, Ui, Vec2};
 use uuid::Uuid;
 use crate::app::ConferApp;
-use crate::ui::{chat, controls, diagnostics, roster};
+use crate::ui::{chat, controls, diagnostics, polls, roster, whiteboard};
 
 pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
     let full_rect = ui.available_rect_before_wrap();
@@ -58,6 +58,7 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                         app.show_chat = !app.show_chat;
                         if app.show_chat {
                             app.show_roster = false;
+                            app.show_polls = false;
                             app.unread_chat_count = 0;
                         }
                     }
@@ -65,7 +66,19 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                     let roster_bg = if app.show_roster { Color32::from_rgb(2, 132, 199) } else { Color32::from_rgb(26, 29, 33) };
                     if ui.add(egui::Button::new(RichText::new(format!("👥 People ({})", app.roster.len() + 1)).size(12.0).color(Color32::WHITE)).fill(roster_bg).rounding(6.0)).clicked() {
                         app.show_roster = !app.show_roster;
-                        if app.show_roster { app.show_chat = false; }
+                        if app.show_roster {
+                            app.show_chat = false;
+                            app.show_polls = false;
+                        }
+                    }
+
+                    let polls_bg = if app.show_polls { Color32::from_rgb(2, 132, 199) } else { Color32::from_rgb(26, 29, 33) };
+                    if ui.add(egui::Button::new(RichText::new("📊 Polls").size(12.0).color(Color32::WHITE)).fill(polls_bg).rounding(6.0)).clicked() {
+                        app.show_polls = !app.show_polls;
+                        if app.show_polls {
+                            app.show_chat = false;
+                            app.show_roster = false;
+                        }
                     }
 
                     let diag_bg = if app.show_diagnostics { Color32::from_rgb(2, 132, 199) } else { Color32::from_rgb(26, 29, 33) };
@@ -83,7 +96,9 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
         ui.vertical(|ui| {
             ui.set_height(available_height);
 
-            if app.is_screen_sharing {
+            if app.is_whiteboard_active {
+                whiteboard::render_whiteboard(app, ui);
+            } else if app.is_screen_sharing {
                 render_screen_share_stage(app, ui);
             } else {
                 render_video_grid(app, ui);
@@ -100,6 +115,11 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
             ui.vertical(|ui| {
                 ui.set_width(320.0);
                 roster::render_roster(app, ui);
+            });
+        } else if app.show_polls {
+            ui.vertical(|ui| {
+                ui.set_width(340.0);
+                polls::render_polls(app, ui);
             });
         }
     });
