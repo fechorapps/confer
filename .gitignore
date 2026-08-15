@@ -28,4 +28,5 @@ recordings/
 *.log
 .DS_Store
 Thumbs.db
+TestResults/
 
