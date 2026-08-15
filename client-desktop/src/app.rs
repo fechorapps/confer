@@ -127,6 +127,11 @@ pub struct ConferApp {
     pub poll_create_multi_choice: bool,
     pub poll_create_anonymous: bool,
 
+    // Safety & Ergonomics State
+    pub show_leave_confirmation: bool,
+    pub kick_confirmation_target: Option<(Uuid, String)>,
+    pub is_push_to_talk_active: bool,
+
     // Metrics
     pub rtt_ms: u32,
     pub packet_loss_pct: f32,
@@ -220,6 +225,10 @@ impl ConferApp {
             poll_create_options: vec!["".to_string(), "".to_string()],
             poll_create_multi_choice: false,
             poll_create_anonymous: false,
+
+            show_leave_confirmation: false,
+            kick_confirmation_target: None,
+            is_push_to_talk_active: false,
 
             rtt_ms: 28,
             packet_loss_pct: 0.0,
@@ -736,8 +745,95 @@ impl ConferApp {
         self.active_captions.clear();
         self.is_whiteboard_active = false;
         self.show_polls = false;
+        self.show_leave_confirmation = false;
+        self.kick_confirmation_target = None;
+        self.is_push_to_talk_active = false;
         self.current_meeting_id = None;
         self.current_join_code = None;
+    }
+
+    pub fn handle_global_shortcuts(&mut self, ctx: &egui::Context) {
+        if self.view_state != ViewState::MeetingRoom || self.is_waiting_in_lobby {
+            return;
+        }
+
+        // If a text input has active focus, do not intercept typing
+        if ctx.wants_keyboard_input() {
+            return;
+        }
+
+        let input = ctx.input(|i| i.clone());
+
+        // 1. Push-to-Talk (Hold Spacebar)
+        if input.key_down(egui::Key::Space) {
+            if self.is_mic_muted && !self.is_push_to_talk_active {
+                self.is_push_to_talk_active = true;
+                self.client.send_message(ClientMessage::SetMute {
+                    kind: "audio".to_string(),
+                    muted: false,
+                });
+            }
+        } else if self.is_push_to_talk_active {
+            self.is_push_to_talk_active = false;
+            self.client.send_message(ClientMessage::SetMute {
+                kind: "audio".to_string(),
+                muted: true,
+            });
+        }
+
+        // 2. Ctrl/Cmd Mnemonic Hotkeys
+        let ctrl_or_cmd = input.modifiers.command || input.modifiers.ctrl;
+
+        if ctrl_or_cmd {
+            // Ctrl + D -> Toggle Mic
+            if input.key_pressed(egui::Key::D) {
+                self.toggle_mic();
+            }
+            // Ctrl + E -> Toggle Camera
+            if input.key_pressed(egui::Key::E) {
+                self.toggle_camera();
+            }
+            // Ctrl + Shift + S -> Toggle Screen Share
+            if input.modifiers.shift && input.key_pressed(egui::Key::S) {
+                self.toggle_screen_share();
+            }
+            // Ctrl + Shift + C -> Toggle Captions
+            if input.modifiers.shift && input.key_pressed(egui::Key::C) {
+                self.toggle_captions();
+            }
+            // Ctrl + Shift + W -> Toggle Whiteboard
+            if input.modifiers.shift && input.key_pressed(egui::Key::W) {
+                self.toggle_whiteboard();
+            }
+            // Ctrl + Shift + P -> Toggle Polls
+            if input.modifiers.shift && input.key_pressed(egui::Key::P) {
+                self.toggle_polls();
+            }
+            // Ctrl + Shift + M -> Toggle Chat
+            if input.modifiers.shift && input.key_pressed(egui::Key::M) {
+                self.show_chat = !self.show_chat;
+                if self.show_chat {
+                    self.show_roster = false;
+                    self.show_polls = false;
+                    self.unread_chat_count = 0;
+                }
+            }
+        }
+
+        // 3. Escape key (Dismiss modals/drawers)
+        if input.key_pressed(egui::Key::Escape) {
+            if self.show_leave_confirmation {
+                self.show_leave_confirmation = false;
+            } else if self.kick_confirmation_target.is_some() {
+                self.kick_confirmation_target = None;
+            } else if self.show_chat || self.show_roster || self.show_polls {
+                self.show_chat = false;
+                self.show_roster = false;
+                self.show_polls = false;
+            } else if self.is_whiteboard_active {
+                self.is_whiteboard_active = false;
+            }
+        }
     }
 
 
@@ -890,6 +986,7 @@ impl eframe::App for ConferApp {
         ctx.set_visuals(visuals);
 
         self.poll_incoming_messages();
+        self.handle_global_shortcuts(ctx);
 
         // Update local live camera frame texture with zero redundant GPU uploads
         if !self.is_camera_off {

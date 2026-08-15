@@ -128,6 +128,9 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
     // Floating Emoji Reaction Animations
     render_reactions(app, ui, full_rect);
 
+    // Push-to-Talk Active Glow Banner
+    render_push_to_talk_indicator(app, ui, full_rect);
+
     // Diagnostics HUD Modal / Window
     if app.show_diagnostics {
         diagnostics::render_diagnostics(app, ui.ctx());
@@ -138,6 +141,116 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
 
     // Bottom Control Dock
     controls::render_controls(app, ui);
+
+    // Destructive Actions Safety Confirmation Modals (Leave Meeting & Kick Participant)
+    render_safety_modals(app, ui, full_rect);
+}
+
+fn render_push_to_talk_indicator(app: &ConferApp, ui: &mut Ui, full_rect: Rect) {
+    if !app.is_push_to_talk_active {
+        return;
+    }
+
+    let ptt_pos = Pos2::new(full_rect.center().x, full_rect.top() + 64.0);
+    let ptt_rect = Rect::from_center_size(ptt_pos, Vec2::new(340.0, 36.0));
+
+    ui.painter().rect_filled(ptt_rect, 18.0, Color32::from_rgba_premultiplied(16, 185, 129, 245));
+    ui.painter().rect_stroke(ptt_rect, 18.0, Stroke::new(1.5_f32, Color32::from_rgb(209, 250, 229)));
+
+    ui.painter().text(
+        ptt_pos,
+        egui::Align2::CENTER_CENTER,
+        "🎙 TRANSMITIENDO (Push-to-Talk: Espacio)",
+        egui::FontId::proportional(12.5),
+        Color32::WHITE,
+    );
+}
+
+fn render_safety_modals(app: &mut ConferApp, ui: &mut Ui, full_rect: Rect) {
+    let ctx = ui.ctx().clone();
+
+    // 1. Leave Meeting Confirmation Modal
+    if app.show_leave_confirmation {
+        // Dim background overlay
+        ui.painter().rect_filled(full_rect, 0.0, Color32::from_rgba_premultiplied(0, 0, 0, 180));
+
+        let modal_pos = full_rect.center();
+        let modal_size = Vec2::new(380.0, 180.0);
+        let modal_rect = Rect::from_center_size(modal_pos, modal_size);
+
+        egui::Area::new(egui::Id::new("leave_confirm_modal"))
+            .fixed_pos(modal_rect.min)
+            .order(egui::Order::Foreground)
+            .show(&ctx, |ui| {
+                egui::Frame::group(ui.style())
+                    .fill(Color32::from_rgb(18, 20, 23))
+                    .stroke(Stroke::new(1.5_f32, Color32::from_rgb(225, 29, 72)))
+                    .rounding(16.0)
+                    .inner_margin(egui::Margin::symmetric(24.0, 20.0))
+                    .show(ui, |ui| {
+                        ui.set_width(modal_size.x - 48.0);
+                        ui.vertical_centered(|ui| {
+                            ui.label(RichText::new("¿Deseas salir de la reunión?").size(16.0).strong().color(Color32::WHITE));
+                            ui.add_space(8.0);
+                            ui.label(RichText::new("Se interrumpirá tu conexión de audio y video con los participantes.").size(12.0).color(Color32::from_rgb(148, 163, 184)));
+                            ui.add_space(20.0);
+
+                            ui.horizontal(|ui| {
+                                ui.columns(2, |cols| {
+                                    if cols[0].add_sized(Vec2::new(cols[0].available_width(), 34.0), egui::Button::new(RichText::new("Cancelar (Esc)").size(12.0).color(Color32::WHITE)).fill(Color32::from_rgb(38, 42, 48)).rounding(8.0)).clicked() {
+                                        app.show_leave_confirmation = false;
+                                    }
+                                    if cols[1].add_sized(Vec2::new(cols[1].available_width(), 34.0), egui::Button::new(RichText::new("✕ Salir de la Sala").size(12.0).strong().color(Color32::WHITE)).fill(Color32::from_rgb(225, 29, 72)).rounding(8.0)).clicked() {
+                                        app.leave_meeting();
+                                    }
+                                });
+                            });
+                        });
+                    });
+            });
+    }
+
+    // 2. Kick Participant Confirmation Modal
+    if let Some((target_id, target_name)) = app.kick_confirmation_target.clone() {
+        // Dim background overlay
+        ui.painter().rect_filled(full_rect, 0.0, Color32::from_rgba_premultiplied(0, 0, 0, 180));
+
+        let modal_pos = full_rect.center();
+        let modal_size = Vec2::new(400.0, 190.0);
+        let modal_rect = Rect::from_center_size(modal_pos, modal_size);
+
+        egui::Area::new(egui::Id::new("kick_confirm_modal"))
+            .fixed_pos(modal_rect.min)
+            .order(egui::Order::Foreground)
+            .show(&ctx, |ui| {
+                egui::Frame::group(ui.style())
+                    .fill(Color32::from_rgb(18, 20, 23))
+                    .stroke(Stroke::new(1.5_f32, Color32::from_rgb(225, 29, 72)))
+                    .rounding(16.0)
+                    .inner_margin(egui::Margin::symmetric(24.0, 20.0))
+                    .show(ui, |ui| {
+                        ui.set_width(modal_size.x - 48.0);
+                        ui.vertical_centered(|ui| {
+                            ui.label(RichText::new(format!("¿Expulsar a {target_name}?")).size(16.0).strong().color(Color32::WHITE));
+                            ui.add_space(8.0);
+                            ui.label(RichText::new("El participante será desconectado inmediatamente de la conferencia.").size(12.0).color(Color32::from_rgb(148, 163, 184)));
+                            ui.add_space(20.0);
+
+                            ui.horizontal(|ui| {
+                                ui.columns(2, |cols| {
+                                    if cols[0].add_sized(Vec2::new(cols[0].available_width(), 34.0), egui::Button::new(RichText::new("Cancelar (Esc)").size(12.0).color(Color32::WHITE)).fill(Color32::from_rgb(38, 42, 48)).rounding(8.0)).clicked() {
+                                        app.kick_confirmation_target = None;
+                                    }
+                                    if cols[1].add_sized(Vec2::new(cols[1].available_width(), 34.0), egui::Button::new(RichText::new("🚫 Expulsar").size(12.0).strong().color(Color32::WHITE)).fill(Color32::from_rgb(225, 29, 72)).rounding(8.0)).clicked() {
+                                        app.host_kick_participant(target_id);
+                                        app.kick_confirmation_target = None;
+                                    }
+                                });
+                            });
+                        });
+                    });
+            });
+    }
 }
 
 

@@ -69,7 +69,6 @@ pub fn render_roster(app: &mut ConferApp, ui: &mut Ui) {
             let mut reject_action: Option<Uuid> = None;
             let mut admit_all = false;
             let mut mute_action: Option<Uuid> = None;
-            let mut kick_action: Option<Uuid> = None;
 
             if is_host && app.roster_tab == RosterTab::WaitingRoom {
                 // --- WAITING ROOM TAB CONTENT ---
@@ -185,10 +184,10 @@ pub fn render_roster(app: &mut ConferApp, ui: &mut Ui) {
 
                                     if is_host {
                                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                            if ui.add(egui::Button::new(RichText::new("Kick").size(10.0).color(Color32::from_rgb(254, 205, 211))).fill(Color32::from_rgb(225, 29, 72)).rounding(4.0)).clicked() {
-                                                kick_action = Some(p.participant_id);
+                                            if ui.add(egui::Button::new(RichText::new("Kick").size(10.0).color(Color32::from_rgb(254, 205, 211))).fill(Color32::from_rgb(225, 29, 72)).rounding(4.0)).on_hover_text("Evict participant").clicked() {
+                                                app.kick_confirmation_target = Some((p.participant_id, p.display_name.clone()));
                                             }
-                                            if ui.add(egui::Button::new(RichText::new("Mute").size(10.0).color(Color32::WHITE)).fill(Color32::from_rgb(38, 42, 48)).rounding(4.0)).clicked() {
+                                            if ui.add(egui::Button::new(RichText::new("Mute").size(10.0).color(Color32::WHITE)).fill(Color32::from_rgb(38, 42, 48)).rounding(4.0)).on_hover_text("Mute audio").clicked() {
                                                 mute_action = Some(p.participant_id);
                                             }
                                         });
@@ -212,9 +211,6 @@ pub fn render_roster(app: &mut ConferApp, ui: &mut Ui) {
             }
             if let Some(id) = mute_action {
                 app.host_mute_participant(id);
-            }
-            if let Some(id) = kick_action {
-                app.host_kick_participant(id);
             }
         });
 }
