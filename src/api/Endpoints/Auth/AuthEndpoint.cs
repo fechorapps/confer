@@ -1,6 +1,8 @@
+using Confer.Application.Auth.Sso;
 using Confer.Application.Interfaces;
 using Confer.Domain.Identity;
 using Confer.Shared.Api;
+using Confer.Shared.Application.Interfaces;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -18,6 +20,11 @@ public sealed class AuthEndpoint : BaseModule, IEndpoint
 
         group.MapPost("/dev-login", DevLogin).WithName("DevLogin");
         group.MapGet("/me", GetMe).WithName("GetMe");
+
+        // Enterprise SSO Endpoints
+        group.MapGet("/sso/providers", GetSsoProviders).WithName("GetSsoProviders");
+        group.MapGet("/sso/{provider}/authorize", SsoAuthorize).WithName("SsoAuthorize");
+        group.MapPost("/sso/{provider}/callback", SsoCallback).WithName("SsoCallback");
     }
 
     public record DevLoginRequest(string Email, string DisplayName);
@@ -62,5 +69,39 @@ public sealed class AuthEndpoint : BaseModule, IEndpoint
 
         var (userId, email, name) = validation.Value;
         return TypedResults.Ok(new { UserId = userId, Email = email, DisplayName = name });
+    }
+
+    private static IResult GetSsoProviders(
+        [FromServices] ISsoAuthenticationService ssoService)
+    {
+        var providers = ssoService.GetAvailableProviders();
+        return TypedResults.Ok(providers);
+    }
+
+    private static async Task<IResult> SsoAuthorize(
+        [FromRoute] string provider,
+        [FromQuery] string? redirectUri,
+        [FromQuery] string? domainHint,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var result = await dispatcher.QueryAsync(new SsoAuthorizeQuery(provider, redirectUri, domainHint), ct);
+        return result.IsSuccess
+            ? TypedResults.Ok(result.Value)
+            : TypedResults.BadRequest(new { result.Error.Code, result.Error.Description });
+    }
+
+    public record SsoCallbackBody(string Code, string State, string? CodeVerifier);
+
+    private static async Task<IResult> SsoCallback(
+        [FromRoute] string provider,
+        [FromBody] SsoCallbackBody body,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var result = await dispatcher.SendAsync(new SsoCallbackCommand(provider, body.Code, body.State, body.CodeVerifier), ct);
+        return result.IsSuccess
+            ? TypedResults.Ok(result.Value)
+            : TypedResults.BadRequest(new { result.Error.Code, result.Error.Description });
     }
 }

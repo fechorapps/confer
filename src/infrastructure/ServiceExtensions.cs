@@ -58,6 +58,12 @@ public static class ServiceExtensions
         // In-Room AI Copilot / Companion
         services.AddSingleton<AI.IConferAiCompanionService, AI.ConferAiCompanionService>();
 
+        // Enterprise SSO Authentication Service
+        services.AddScoped<Application.Auth.Sso.ISsoAuthenticationService, Auth.Sso.SsoAuthenticationService>();
+
+        // PSTN / SIP Telephony Bridge
+        services.AddScoped<Application.Meetings.Telephony.ITelephonyBridgeService, Telephony.TwilioSipTelephonyBridge>();
+
         return services;
     }
 }
