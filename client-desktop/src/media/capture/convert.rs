@@ -43,3 +43,24 @@ pub(crate) fn bgrx_to_color32(raw: &[u8], width: usize, height: usize) -> Option
     });
     Some(pixels)
 }
+
+/// Converts a tightly-packed RGBA/RGBx32 buffer (4 bytes/pixel, R,G,B,A order)
+/// into `Color32` pixels. Returns `None` if `raw` is smaller than
+/// `width * height * 4` bytes.
+pub(crate) fn rgba_to_color32(raw: &[u8], width: usize, height: usize) -> Option<Vec<Color32>> {
+    if width == 0 || height == 0 || raw.len() < width * height * 4 {
+        return None;
+    }
+
+    let mut pixels = vec![Color32::BLACK; width * height];
+    pixels.par_chunks_mut(width).enumerate().for_each(|(row_y, row_pixels)| {
+        let row_offset = row_y * width * 4;
+        for (col_x, px) in row_pixels.iter_mut().enumerate() {
+            let idx = row_offset + col_x * 4;
+            if idx + 2 < raw.len() {
+                *px = Color32::from_rgb(raw[idx], raw[idx + 1], raw[idx + 2]);
+            }
+        }
+    });
+    Some(pixels)
+}

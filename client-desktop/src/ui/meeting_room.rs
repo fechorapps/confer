@@ -354,7 +354,7 @@ fn render_screen_share_stage(app: &mut ConferApp, ui: &mut Ui) {
                         let fit_h = fit_h.max(10.0);
 
                         ui.centered_and_justified(|ui| {
-                            ui.image((tex.id(), Vec2::new(fit_w, fit_h)));
+                            ui.add(egui::Image::new(tex).fit_to_exact_size(Vec2::new(fit_w, fit_h)).rounding(8.0));
                         });
                     } else {
                         ui.vertical_centered(|ui| {

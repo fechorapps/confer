@@ -10,6 +10,7 @@ use egui::ColorImage;
 use pipewire::context::ContextRc;
 use pipewire::main_loop::MainLoopRc;
 use pipewire::properties::properties;
+use pipewire::spa::param::video::VideoFormat;
 use pipewire::spa::pod::Pod;
 use pipewire::spa::utils::Direction;
 use pipewire::stream::{StreamFlags, StreamRc};
@@ -119,7 +120,7 @@ impl ScreenCaptureBackend for PortalBackend {
             };
 
             is_running.store(true, Ordering::Relaxed);
-            capture_pipewire_loop(node_id, sink, is_running);
+            capture_pipewire_loop(node_id, sink, is_running, &last_error);
         });
 
         self.worker_handle = Some(handle);
@@ -160,16 +161,22 @@ struct StreamUserData {
     is_running: Arc<AtomicBool>,
     width: usize,
     height: usize,
+    format: VideoFormat,
     frame_seq: u64,
 }
 
-fn capture_pipewire_loop(node_id: u32, sink: FrameSink, is_running: Arc<AtomicBool>) {
+fn capture_pipewire_loop(
+    node_id: u32,
+    sink: FrameSink,
+    is_running: Arc<AtomicBool>,
+    last_error: &Arc<Mutex<Option<CaptureError>>>,
+) {
     pipewire::init();
 
     let mainloop = match MainLoopRc::new(None) {
         Ok(m) => m,
         Err(e) => {
-            tracing::error!("PipeWire MainLoop creation failed: {e}");
+            store_error(last_error, CaptureError::PortalFailed(format!("PipeWire MainLoop failed: {e}")));
             return;
         }
     };
@@ -177,7 +184,7 @@ fn capture_pipewire_loop(node_id: u32, sink: FrameSink, is_running: Arc<AtomicBo
     let context = match ContextRc::new(&mainloop, None) {
         Ok(c) => c,
         Err(e) => {
-            tracing::error!("PipeWire Context creation failed: {e}");
+            store_error(last_error, CaptureError::PortalFailed(format!("PipeWire Context failed: {e}")));
             return;
         }
     };
@@ -185,7 +192,7 @@ fn capture_pipewire_loop(node_id: u32, sink: FrameSink, is_running: Arc<AtomicBo
     let core = match context.connect_rc(None) {
         Ok(c) => c,
         Err(e) => {
-            tracing::error!("PipeWire Core connect failed: {e}");
+            store_error(last_error, CaptureError::PortalFailed(format!("PipeWire Core connect failed: {e}")));
             return;
         }
     };
@@ -199,7 +206,7 @@ fn capture_pipewire_loop(node_id: u32, sink: FrameSink, is_running: Arc<AtomicBo
     let stream = match StreamRc::new(core, "confer-screencast", props) {
         Ok(s) => s,
         Err(e) => {
-            tracing::error!("PipeWire Stream create failed: {e}");
+            store_error(last_error, CaptureError::PortalFailed(format!("PipeWire Stream create failed: {e}")));
             return;
         }
     };
@@ -209,6 +216,7 @@ fn capture_pipewire_loop(node_id: u32, sink: FrameSink, is_running: Arc<AtomicBo
         is_running: is_running.clone(),
         width: 1920,
         height: 1080,
+        format: VideoFormat::BGRx,
         frame_seq: 0,
     };
 
@@ -235,12 +243,24 @@ fn capture_pipewire_loop(node_id: u32, sink: FrameSink, is_running: Arc<AtomicBo
             }
         })
         .param_changed(|_stream, user_data, id, param| {
-            if id == pipewire::spa::param::ParamType::Format.as_raw() {
-                if let Some(param) = param {
-                    if let Some((w, h)) = parse_video_dimensions(param) {
-                        user_data.width = w;
-                        user_data.height = h;
-                    }
+            let Some(param) = param else { return; };
+            if id != pipewire::spa::param::ParamType::Format.as_raw() {
+                return;
+            }
+
+            let mut info = pipewire::spa::param::video::VideoInfoRaw::default();
+            if info.parse(param).is_ok() {
+                let size = info.size();
+                if size.width > 0 && size.height > 0 {
+                    user_data.width = size.width as usize;
+                    user_data.height = size.height as usize;
+                    user_data.format = info.format();
+                    tracing::info!(
+                        "Negotiated PipeWire screen share format: {:?} {}x{}",
+                        info.format(),
+                        size.width,
+                        size.height
+                    );
                 }
             }
         })
@@ -274,10 +294,29 @@ fn capture_pipewire_loop(node_id: u32, sink: FrameSink, is_running: Arc<AtomicBo
                             (w, h)
                         };
 
-                        if let Some(pixels) = convert::bgrx_to_color32(slice, actual_w, actual_h) {
+                        let pixels = match user_data.format {
+                            VideoFormat::RGBA | VideoFormat::RGBx => {
+                                convert::rgba_to_color32(slice, actual_w, actual_h)
+                            }
+                            VideoFormat::RGB => {
+                                convert::rgb_to_color32(slice, actual_w, actual_h)
+                            }
+                            _ => {
+                                convert::bgrx_to_color32(slice, actual_w, actual_h)
+                                    .or_else(|| convert::rgba_to_color32(slice, actual_w, actual_h))
+                            }
+                        };
+
+                        if let Some(pixels) = pixels {
                             user_data.frame_seq += 1;
                             if let Ok(mut guard) = user_data.sink.lock() {
-                                *guard = Some((user_data.frame_seq, Arc::new(ColorImage { size: [actual_w, actual_h], pixels })));
+                                *guard = Some((
+                                    user_data.frame_seq,
+                                    Arc::new(ColorImage {
+                                        size: [actual_w, actual_h],
+                                        pixels,
+                                    }),
+                                ));
                             }
                         }
                     }
@@ -286,27 +325,84 @@ fn capture_pipewire_loop(node_id: u32, sink: FrameSink, is_running: Arc<AtomicBo
         })
         .register();
 
+    let obj = pipewire::spa::pod::object!(
+        pipewire::spa::utils::SpaTypes::ObjectParamFormat,
+        pipewire::spa::param::ParamType::EnumFormat,
+        pipewire::spa::pod::property!(
+            pipewire::spa::param::format::FormatProperties::MediaType,
+            Id,
+            pipewire::spa::param::format::MediaType::Video
+        ),
+        pipewire::spa::pod::property!(
+            pipewire::spa::param::format::FormatProperties::MediaSubtype,
+            Id,
+            pipewire::spa::param::format::MediaSubtype::Raw
+        ),
+        pipewire::spa::pod::property!(
+            pipewire::spa::param::format::FormatProperties::VideoFormat,
+            Choice,
+            Enum,
+            Id,
+            pipewire::spa::param::video::VideoFormat::BGRx,
+            pipewire::spa::param::video::VideoFormat::BGRx,
+            pipewire::spa::param::video::VideoFormat::BGRA,
+            pipewire::spa::param::video::VideoFormat::RGBA,
+            pipewire::spa::param::video::VideoFormat::RGBx,
+            pipewire::spa::param::video::VideoFormat::RGB,
+        ),
+        pipewire::spa::pod::property!(
+            pipewire::spa::param::format::FormatProperties::VideoSize,
+            Choice,
+            Range,
+            Rectangle,
+            pipewire::spa::utils::Rectangle {
+                width: 1920,
+                height: 1080
+            },
+            pipewire::spa::utils::Rectangle {
+                width: 1,
+                height: 1
+            },
+            pipewire::spa::utils::Rectangle {
+                width: 4096,
+                height: 4096
+            }
+        ),
+        pipewire::spa::pod::property!(
+            pipewire::spa::param::format::FormatProperties::VideoFramerate,
+            Choice,
+            Range,
+            Fraction,
+            pipewire::spa::utils::Fraction { num: 30, denom: 1 },
+            pipewire::spa::utils::Fraction { num: 1, denom: 1 },
+            pipewire::spa::utils::Fraction { num: 60, denom: 1 }
+        ),
+    );
+
+    let values: Vec<u8> = match pipewire::spa::pod::serialize::PodSerializer::serialize(
+        std::io::Cursor::new(Vec::new()),
+        &pipewire::spa::pod::Value::Object(obj),
+    ) {
+        Ok((cursor, _)) => cursor.into_inner(),
+        Err(e) => {
+            store_error(last_error, CaptureError::PortalFailed(format!("Failed to serialize SPA format pod: {e}")));
+            return;
+        }
+    };
+
+    let mut params = [match Pod::from_bytes(&values) {
+        Some(p) => p,
+        None => {
+            store_error(last_error, CaptureError::PortalFailed("Failed to parse Pod from serialized format bytes".to_string()));
+            return;
+        }
+    }];
+
     let flags = StreamFlags::AUTOCONNECT | StreamFlags::MAP_BUFFERS;
-    if let Err(e) = stream.connect(Direction::Input, Some(node_id), flags, &mut []) {
-        tracing::error!("Failed to connect PipeWire stream to node {node_id}: {e}");
+    if let Err(e) = stream.connect(Direction::Input, Some(node_id), flags, &mut params) {
+        store_error(last_error, CaptureError::PortalFailed(format!("Failed to connect PipeWire stream to node {node_id}: {e}")));
         return;
     }
 
     mainloop.run();
-}
-
-fn parse_video_dimensions(param: &Pod) -> Option<(usize, usize)> {
-    use pipewire::spa::param::format::FormatProperties;
-    use pipewire::spa::utils::Id;
-
-    if let Ok(object) = param.as_object() {
-        if let Some(prop) = object.find_prop(Id(FormatProperties::VideoSize.0)) {
-            if let Ok(rect) = prop.value().get_rectangle() {
-                if rect.width > 0 && rect.height > 0 {
-                    return Some((rect.width as usize, rect.height as usize));
-                }
-            }
-        }
-    }
-    None
 }
