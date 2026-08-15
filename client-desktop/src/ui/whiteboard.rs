@@ -108,7 +108,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                         let stroke = if is_selected {
                             Stroke::new(2.5_f32, Color32::WHITE)
                         } else {
-                            Stroke::new(1.0_f32, Color32::from_rgb(50, 55, 65))
+                            Stroke::new(1.0_f32, crate::ui::theme::Theme::BORDER_SUBTLE)
                         };
 
                         let (rect, resp) =

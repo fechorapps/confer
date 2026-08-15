@@ -90,114 +90,56 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                         });
                 }
 
-                // Right Action Panels Hub
+                // Right Status Hub (Clean Telemetry & Streaming Indicators)
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    // Diagnostics HUD Toggle
-                    let diag_bg = if app.show_diagnostics {
-                        Color32::from_rgb(2, 132, 199)
+                    // HUD Telemetry Toggle Button
+                    let hud_bg = if app.show_diagnostics {
+                        crate::ui::theme::Theme::PRIMARY
                     } else {
-                        Color32::from_rgb(26, 29, 33)
+                        crate::ui::theme::Theme::SURFACE_2
                     };
                     if ui
                         .add(
                             egui::Button::new(
-                                RichText::new("⚙ HUD")
-                                    .size(11.5)
+                                RichText::new("⚡ HUD")
+                                    .size(11.0)
                                     .strong()
                                     .color(Color32::WHITE),
                             )
-                            .fill(diag_bg)
-                            .rounding(6.0),
+                            .fill(hud_bg)
+                            .rounding(crate::ui::theme::Theme::RADIUS_SM),
                         )
+                        .on_hover_text("Toggle Real-Time Diagnostics HUD")
                         .clicked()
                     {
                         app.show_diagnostics = !app.show_diagnostics;
                     }
 
-                    // Polls Panel Toggle
-                    let polls_bg = if app.show_polls {
-                        Color32::from_rgb(2, 132, 199)
-                    } else {
-                        Color32::from_rgb(26, 29, 33)
-                    };
-                    if ui
-                        .add(
-                            egui::Button::new(
-                                RichText::new("📊 Polls")
-                                    .size(11.5)
-                                    .strong()
-                                    .color(Color32::WHITE),
-                            )
-                            .fill(polls_bg)
-                            .rounding(6.0),
-                        )
-                        .clicked()
-                    {
-                        app.show_polls = !app.show_polls;
-                        if app.show_polls {
-                            app.show_chat = false;
-                            app.show_roster = false;
-                        }
-                    }
+                    ui.add_space(8.0);
 
-                    // Chat Panel Toggle
-                    let chat_btn_text = if app.unread_chat_count > 0 {
-                        format!("💬 Chat ({})", app.unread_chat_count)
-                    } else {
-                        "💬 Chat".to_string()
-                    };
-                    let chat_bg = if app.show_chat {
-                        Color32::from_rgb(2, 132, 199)
-                    } else {
-                        Color32::from_rgb(26, 29, 33)
-                    };
-                    if ui
-                        .add(
-                            egui::Button::new(
-                                RichText::new(chat_btn_text)
-                                    .size(11.5)
-                                    .strong()
-                                    .color(Color32::WHITE),
-                            )
-                            .fill(chat_bg)
-                            .rounding(6.0),
-                        )
-                        .clicked()
-                    {
-                        app.show_chat = !app.show_chat;
-                        if app.show_chat {
-                            app.show_roster = false;
-                            app.show_polls = false;
-                            app.unread_chat_count = 0;
-                        }
-                    }
-
-                    // People / Participants Roster Toggle
-                    let roster_bg = if app.show_roster {
-                        Color32::from_rgb(2, 132, 199)
-                    } else {
-                        Color32::from_rgb(26, 29, 33)
-                    };
-                    let roster_text = format!("👥 People ({})", app.roster.len() + 1);
-                    if ui
-                        .add(
-                            egui::Button::new(
-                                RichText::new(roster_text)
-                                    .size(11.5)
-                                    .strong()
-                                    .color(Color32::WHITE),
-                            )
-                            .fill(roster_bg)
-                            .rounding(6.0),
-                        )
-                        .clicked()
-                    {
-                        app.show_roster = !app.show_roster;
-                        if app.show_roster {
-                            app.show_chat = false;
-                            app.show_polls = false;
-                        }
-                    }
+                    // Network Health Pill
+                    egui::Frame::group(ui.style())
+                        .fill(crate::ui::theme::Theme::SURFACE_2)
+                        .stroke(Stroke::new(1.0_f32, crate::ui::theme::Theme::BORDER_SUBTLE))
+                        .rounding(crate::ui::theme::Theme::RADIUS_PILL)
+                        .inner_margin(egui::Margin::symmetric(10.0, 4.0))
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new("●").size(8.0).color(crate::ui::theme::Theme::EMERALD));
+                                ui.label(
+                                    RichText::new(format!("{}ms RTT", app.rtt_ms))
+                                        .size(11.0)
+                                        .strong()
+                                        .color(crate::ui::theme::Theme::TEXT_PRIMARY),
+                                );
+                                ui.label(RichText::new("•").size(9.0).color(crate::ui::theme::Theme::TEXT_MUTED));
+                                ui.label(
+                                    RichText::new(format!("{:.1}% Loss", app.packet_loss_pct))
+                                        .size(10.5)
+                                        .color(crate::ui::theme::Theme::TEXT_SECONDARY),
+                                );
+                            });
+                        });
                 });
             });
         });
@@ -270,7 +212,7 @@ fn render_push_to_talk_indicator(app: &ConferApp, ui: &mut Ui, full_rect: Rect) 
     ui.painter().rect_stroke(
         ptt_rect,
         18.0,
-        Stroke::new(1.5_f32, Color32::from_rgb(209, 250, 229)),
+        Stroke::new(1.5_f32, crate::ui::theme::Theme::EMERALD_LIGHT),
     );
 
     ui.painter().text(
@@ -794,8 +736,8 @@ fn render_single_tile(ui: &mut Ui, props: &TileProps<'_>) {
                         .to_uppercase()
                         .to_string();
                     egui::Frame::group(ui.style())
-                        .fill(Color32::from_rgb(34, 38, 44))
-                        .stroke(Stroke::new(1.0_f32, Color32::from_rgb(45, 50, 58)))
+                        .fill(crate::ui::theme::Theme::SURFACE_2)
+                        .stroke(Stroke::new(1.0_f32, crate::ui::theme::Theme::BORDER_SUBTLE))
                         .rounding(32.0)
                         .inner_margin(16.0)
                         .show(ui, |ui| {
