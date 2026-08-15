@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::media::background::BackgroundEffect;
 use crate::media::filters::VideoFilter;
+use crate::media::virtual_background::VirtualBackgroundMode;
 use crate::media::{detect_displays, CameraCapturer, DisplayInfo, PickerMode, ScreenCapturer};
 use crate::sdk::client::ConferClient;
 use crate::sdk::protocol::{
@@ -72,11 +73,13 @@ pub struct ConferApp {
     pub unread_chat_count: usize,
     pub active_reactions: Vec<ActiveReaction>,
 
-    // Local Media Controls
+    // Local Media Controls & Audio/Video AI Engines
     pub is_mic_muted: bool,
     pub is_camera_off: bool,
     pub is_screen_sharing: bool,
     pub is_hand_raised: bool,
+    pub is_ai_denoise_enabled: bool,
+    pub virtual_bg_mode: VirtualBackgroundMode,
     pub active_filter: VideoFilter,
     pub active_background: BackgroundEffect,
 
@@ -171,6 +174,8 @@ impl ConferApp {
             is_camera_off: false,
             is_screen_sharing: false,
             is_hand_raised: false,
+            is_ai_denoise_enabled: true,
+            virtual_bg_mode: VirtualBackgroundMode::None,
             active_filter: VideoFilter::None,
             active_background: BackgroundEffect::None,
 
@@ -217,13 +222,24 @@ impl ConferApp {
         }
     }
 
+    pub fn toggle_ai_denoise(&mut self) {
+        self.is_ai_denoise_enabled = !self.is_ai_denoise_enabled;
+    }
+
+    pub fn set_virtual_bg_mode(&mut self, mode: VirtualBackgroundMode) {
+        self.virtual_bg_mode = mode.clone();
+        self.camera_capturer.set_background(mode);
+    }
+
     pub fn choose_custom_background(&mut self) {
         if let Some(path) = rfd::FileDialog::new()
             .add_filter("Images", &["png", "jpg", "jpeg", "webp"])
             .set_title("Choose Virtual Background Image")
             .pick_file()
         {
+            self.virtual_bg_mode = VirtualBackgroundMode::CustomImage(path.clone());
             self.active_background = BackgroundEffect::Custom(path);
+            self.camera_capturer.set_background(self.virtual_bg_mode.clone());
         }
     }
 
@@ -823,7 +839,7 @@ impl eframe::App for ConferApp {
         // Update local live camera frame texture with zero redundant GPU uploads
         if !self.is_camera_off {
             self.camera_capturer.set_filter(self.active_filter);
-            self.camera_capturer.set_background(self.active_background.clone());
+            self.camera_capturer.set_background(self.virtual_bg_mode.clone());
             if let Some((frame_id, frame)) = self.camera_capturer.get_latest_frame_if_newer(self.last_rendered_frame_id) {
                 self.local_video_texture = Some(ctx.load_texture("local_camera_feed", frame, egui::TextureOptions::LINEAR));
                 self.last_rendered_frame_id = frame_id;

@@ -92,6 +92,19 @@ using (var scope = app.Services.CreateScope())
                 CONSTRAINT ""FK_breakout_rooms_meetings_MeetingId"" FOREIGN KEY (""MeetingId"") REFERENCES ""meetings"" (""Id"") ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS ""IX_breakout_rooms_MeetingId"" ON ""breakout_rooms"" (""MeetingId"");
+
+            CREATE TABLE IF NOT EXISTS ""meeting_summaries"" (
+                ""Id"" TEXT NOT NULL PRIMARY KEY,
+                ""MeetingId"" TEXT NOT NULL,
+                ""Overview"" TEXT NOT NULL,
+                ""KeyDecisions"" TEXT NOT NULL,
+                ""ActionItems"" TEXT NOT NULL,
+                ""GeneratedAt"" TEXT NOT NULL,
+                ""DurationMinutes"" INTEGER NOT NULL,
+                ""ParticipantCount"" INTEGER NOT NULL,
+                CONSTRAINT ""FK_meeting_summaries_meetings_MeetingId"" FOREIGN KEY (""MeetingId"") REFERENCES ""meetings"" (""Id"") ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_meeting_summaries_MeetingId"" ON ""meeting_summaries"" (""MeetingId"");
         ");
     }
 

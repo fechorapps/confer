@@ -17,6 +17,7 @@ public interface IConferDbContext
     DbSet<PollOption> PollOptions { get; }
     DbSet<PollVote> PollVotes { get; }
     DbSet<BreakoutRoom> BreakoutRooms { get; }
+    DbSet<MeetingSummary> MeetingSummaries { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

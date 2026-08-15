@@ -115,6 +115,12 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
                             if ui.add(egui::Button::new(RichText::new(mic_label).size(12.0).color(Color32::WHITE)).fill(mic_bg).rounding(6.0)).clicked() {
                                 app.is_mic_muted = !app.is_mic_muted;
                             }
+
+                            let denoise_bg = if app.is_ai_denoise_enabled { Color32::from_rgb(2, 132, 199) } else { Color32::from_rgb(26, 29, 33) };
+                            let denoise_label = if app.is_ai_denoise_enabled { "⚡ AI Denoise: ON" } else { "⚡ AI Denoise: OFF" };
+                            if ui.add(egui::Button::new(RichText::new(denoise_label).size(12.0).color(Color32::WHITE)).fill(denoise_bg).rounding(6.0)).clicked() {
+                                app.toggle_ai_denoise();
+                            }
                         });
 
                         ui.add_space(10.0);
@@ -147,22 +153,22 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
 
                         ui.add_space(10.0);
 
-                        // Backgrounds & Blur Picker
+                        // Virtual Backgrounds & Blur Picker
                         ui.label(RichText::new("🖼️ Background & Portrait Blur").size(12.0).strong().color(Color32::from_rgb(248, 250, 252)));
                         ui.add_space(4.0);
                         egui::ScrollArea::horizontal().id_salt("bg_scroll").show(ui, |ui| {
                             ui.horizontal(|ui| {
-                                for bg in crate::media::background::BackgroundEffect::all() {
-                                    let is_active = app.active_background == *bg;
+                                for bg in crate::media::VirtualBackgroundMode::all() {
+                                    let is_active = app.virtual_bg_mode == *bg;
                                     let btn_bg = if is_active { Color32::from_rgb(2, 132, 199) } else { Color32::from_rgb(26, 29, 33) };
                                     let text_color = if is_active { Color32::WHITE } else { Color32::from_rgb(203, 213, 225) };
                                     if ui.add(egui::Button::new(RichText::new(bg.label()).size(11.0).color(text_color)).fill(btn_bg).rounding(14.0)).clicked() {
-                                        app.active_background = bg.clone();
+                                        app.set_virtual_bg_mode(bg.clone());
                                     }
                                 }
 
                                 // Custom File Picker Button
-                                let is_custom = matches!(app.active_background, crate::media::background::BackgroundEffect::Custom(_));
+                                let is_custom = matches!(app.virtual_bg_mode, crate::media::VirtualBackgroundMode::CustomImage(_));
                                 let custom_bg = if is_custom { Color32::from_rgb(2, 132, 199) } else { Color32::from_rgb(26, 29, 33) };
                                 if ui.add(egui::Button::new(RichText::new("📁 Custom Photo...").size(11.0).color(Color32::WHITE)).fill(custom_bg).rounding(14.0)).clicked() {
                                     app.choose_custom_background();

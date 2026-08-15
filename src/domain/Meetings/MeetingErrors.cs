@@ -16,4 +16,7 @@ public static class MeetingErrors
     public static readonly Error ParticipantNotInWaitingRoom = Error.Conflict("Meeting.ParticipantNotInWaitingRoom", "The participant is not in the waiting room.");
     public static readonly Error WaitingRoomDisabled = Error.Conflict("Meeting.WaitingRoomDisabled", "Waiting room is not enabled for this meeting.");
     public static readonly Error InvalidPolicy = Error.Validation("Meeting.InvalidPolicy", "Meeting policy cannot be null or invalid.");
+    public static readonly Error SummaryNotFound = Error.NotFound("Meeting.SummaryNotFound", "The meeting summary was not found.");
+    public static readonly Error MeetingNotEnded = Error.Conflict("Meeting.MeetingNotEnded", "Meeting must be ended before generating a summary.");
+    public static readonly Error AlreadyGenerating = Error.Conflict("Meeting.AlreadyGenerating", "A summary is already being generated or exists for this meeting.");
 }

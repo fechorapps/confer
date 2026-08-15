@@ -55,6 +55,13 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                         });
                     }
 
+                    // AI Noise Suppression Toggle Button
+                    let denoise_bg = if app.is_ai_denoise_enabled { Color32::from_rgb(2, 132, 199) } else { Color32::from_rgb(26, 29, 33) };
+                    let denoise_text = if app.is_ai_denoise_enabled { "⚡ AI Denoise" } else { "⚡ Denoise Off" };
+                    if ui.add(egui::Button::new(RichText::new(denoise_text).size(12.0).color(Color32::WHITE)).fill(denoise_bg).rounding(18.0)).clicked() {
+                        app.toggle_ai_denoise();
+                    }
+
                     // Hand Raise
                     let hand_bg = if app.is_hand_raised { Color32::from_rgb(245, 158, 11) } else { Color32::from_rgb(26, 29, 33) };
                     let hand_text = if app.is_hand_raised { "✋ Lower" } else { "✋ Hand" };
@@ -143,16 +150,16 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                         }
                     });
 
-                    // Backgrounds & Blur Dropdown
+                    // Virtual Backgrounds & Blur Dropdown
                     ui.menu_button(RichText::new("🖼️ Background").size(12.0).color(Color32::WHITE), |ui| {
-                        ui.set_min_width(180.0);
-                        ui.label(RichText::new("Background & Portrait Blur").size(11.0).strong().color(Color32::from_rgb(56, 189, 248)));
+                        ui.set_min_width(200.0);
+                        ui.label(RichText::new("Virtual Background & Blur").size(11.0).strong().color(Color32::from_rgb(56, 189, 248)));
                         ui.separator();
-                        for bg in crate::media::background::BackgroundEffect::all() {
-                            let is_active = app.active_background == *bg;
-                            let label = format!("{}{}", if is_active { "✓ " } else { "   " }, bg.label());
+                        for mode in crate::media::VirtualBackgroundMode::all() {
+                            let is_active = app.virtual_bg_mode == *mode;
+                            let label = format!("{}{}", if is_active { "✓ " } else { "   " }, mode.label());
                             if ui.selectable_label(is_active, label).clicked() {
-                                app.active_background = bg.clone();
+                                app.set_virtual_bg_mode(mode.clone());
                                 ui.close_menu();
                             }
                         }

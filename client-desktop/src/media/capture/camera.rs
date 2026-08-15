@@ -10,9 +10,9 @@ use nokhwa::utils::{
 };
 use nokhwa::Camera;
 
-use crate::media::background::BackgroundEffect;
 use crate::media::capture::convert;
 use crate::media::filters::VideoFilter;
+use crate::media::virtual_background::{VirtualBackgroundMode, VirtualBackgroundProcessor};
 
 pub struct CameraCapturer {
     /// Requested capture resolution. The camera negotiates the closest format
@@ -23,7 +23,7 @@ pub struct CameraCapturer {
     pub height: usize,
     latest_frame: Arc<Mutex<Option<(u64, ColorImage)>>>,
     active_filter_atomic: Arc<AtomicU8>,
-    active_bg_mutex: Arc<Mutex<BackgroundEffect>>,
+    active_bg_mutex: Arc<Mutex<VirtualBackgroundMode>>,
     is_running: Arc<AtomicBool>,
     worker_handle: Option<thread::JoinHandle<()>>,
 }
@@ -32,7 +32,7 @@ impl CameraCapturer {
     pub fn new(width: usize, height: usize) -> Self {
         let latest_frame = Arc::new(Mutex::new(None));
         let active_filter_atomic = Arc::new(AtomicU8::new(0));
-        let active_bg_mutex = Arc::new(Mutex::new(BackgroundEffect::None));
+        let active_bg_mutex = Arc::new(Mutex::new(VirtualBackgroundMode::None));
         let is_running = Arc::new(AtomicBool::new(true));
 
         let frame_sink = latest_frame.clone();
@@ -69,7 +69,7 @@ impl CameraCapturer {
         self.active_filter_atomic.store(val, Ordering::Relaxed);
     }
 
-    pub fn set_background(&self, bg: BackgroundEffect) {
+    pub fn set_background(&self, bg: VirtualBackgroundMode) {
         if let Ok(mut guard) = self.active_bg_mutex.lock() {
             *guard = bg;
         }
@@ -103,7 +103,7 @@ fn capture_loop(
     height: usize,
     frame_sink: Arc<Mutex<Option<(u64, ColorImage)>>>,
     filter_ref: Arc<AtomicU8>,
-    bg_ref: Arc<Mutex<BackgroundEffect>>,
+    bg_ref: Arc<Mutex<VirtualBackgroundMode>>,
     is_running: Arc<AtomicBool>,
 ) {
     let mut backoff = Duration::from_millis(100);
@@ -159,6 +159,7 @@ fn capture_loop(
 
         // Reset backoff on successful stream start
         backoff = Duration::from_millis(100);
+        let bg_processor = VirtualBackgroundProcessor::new();
 
         while is_running.load(Ordering::Relaxed) {
             match camera.frame() {
@@ -182,7 +183,7 @@ fn capture_loop(
 
                     // 1. Apply background blur / virtual background replacement
                     if let Ok(bg_guard) = bg_ref.lock() {
-                        bg_guard.apply(&mut pixels, w, h);
+                        bg_processor.process_frame(&bg_guard, &mut pixels, w, h);
                     }
 
                     // 2. Apply visual tone filter

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Confer.Application.Interfaces;
 using Confer.Domain.Identity;
 using Confer.Domain.Meetings;
@@ -19,6 +20,7 @@ public sealed class ConferDbContext(DbContextOptions<ConferDbContext> options)
     public DbSet<PollOption> PollOptions => Set<PollOption>();
     public DbSet<PollVote> PollVotes => Set<PollVote>();
     public DbSet<BreakoutRoom> BreakoutRooms => Set<BreakoutRoom>();
+    public DbSet<MeetingSummary> MeetingSummaries => Set<MeetingSummary>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -73,6 +75,11 @@ public sealed class ConferDbContext(DbContextOptions<ConferDbContext> options)
             builder.HasMany(m => m.BreakoutRooms)
                 .WithOne()
                 .HasForeignKey(b => b.MeetingId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(m => m.Summary)
+                .WithOne()
+                .HasForeignKey<MeetingSummary>(s => s.MeetingId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -163,6 +170,26 @@ public sealed class ConferDbContext(DbContextOptions<ConferDbContext> options)
             builder.HasKey(b => b.Id);
             builder.Property(b => b.Name).IsRequired().HasMaxLength(150);
             builder.HasIndex(b => b.MeetingId);
+        });
+
+        modelBuilder.Entity<MeetingSummary>(builder =>
+        {
+            builder.ToTable("meeting_summaries");
+            builder.HasKey(s => s.Id);
+            builder.Property(s => s.Overview).IsRequired().HasMaxLength(4000);
+            builder.HasIndex(s => s.MeetingId).IsUnique();
+
+            builder.Property(s => s.KeyDecisions)
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>()
+                );
+
+            builder.Property(s => s.ActionItems)
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => JsonSerializer.Deserialize<List<ActionItem>>(v, (JsonSerializerOptions?)null) ?? new List<ActionItem>()
+                );
         });
     }
 }

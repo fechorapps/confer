@@ -19,6 +19,7 @@ using Confer.Application.Meetings.Polls.GetPolls;
 using Confer.Application.Meetings.Polls.SubmitPollVote;
 using Confer.Application.Meetings.StartRecording;
 using Confer.Application.Meetings.StopRecording;
+using Confer.Application.Meetings.Summary;
 using Confer.Shared.Api;
 using Confer.Shared.Application.Interfaces;
 using Microsoft.AspNetCore.Builder;
@@ -44,6 +45,10 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
         group.MapPost("/{id:guid}/recording/stop", StopRecording).WithName("StopRecording");
         group.MapPost("/{id:guid}/recordings/stop", StopRecording).WithName("StopRecordingAlias");
         group.MapGet("/{id:guid}/recordings", GetRecordings).WithName("GetRecordings");
+
+        // AI Summary & Action Items
+        group.MapPost("/{id:guid}/summary", GenerateMeetingSummary).WithName("GenerateMeetingSummary");
+        group.MapGet("/{id:guid}/summary", GetMeetingSummary).WithName("GetMeetingSummary");
 
         // Polls
         group.MapPost("/{id:guid}/polls", CreatePoll).WithName("CreatePoll");
@@ -78,6 +83,7 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
     public record LockMeetingRequest(Guid ActorId, bool Lock);
     public record StartRecordingRequest(Guid ActorId);
     public record StopRecordingRequest(Guid ActorId);
+    public record GenerateMeetingSummaryRequest(Guid ActorId, bool ForceRegenerate = false);
     public record CreatePollRequest(Guid CreatorId, string Question, List<string> Options, bool IsAnonymous = false, bool IsMultiChoice = false);
     public record SubmitPollVoteRequest(Guid VoterId, List<Guid> OptionIds);
     public record ClosePollRequest(Guid ActorId);
@@ -200,6 +206,27 @@ public class MeetingsEndpoint : BaseModule, IEndpoint
         CancellationToken ct)
     {
         var query = new GetMeetingRecordingsQuery(id);
+        var result = await dispatcher.QueryAsync(query, ct);
+        return OkOrFailure(result);
+    }
+
+    private static async Task<IResult> GenerateMeetingSummary(
+        Guid id,
+        [FromBody] GenerateMeetingSummaryRequest request,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var command = new GenerateMeetingSummaryCommand(id, request.ActorId, request.ForceRegenerate);
+        var result = await dispatcher.SendAsync(command, ct);
+        return OkOrFailure(result);
+    }
+
+    private static async Task<IResult> GetMeetingSummary(
+        Guid id,
+        [FromServices] ICqrsDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var query = new GetMeetingSummaryQuery(id);
         var result = await dispatcher.QueryAsync(query, ct);
         return OkOrFailure(result);
     }

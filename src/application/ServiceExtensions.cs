@@ -39,6 +39,9 @@ public static class ServiceExtensions
         // Register FluentValidation validators
         services.AddValidatorsFromAssembly(assembly);
 
+        // Register AI Summary Service
+        services.AddScoped<Confer.Application.Meetings.Summary.IAiSummaryService, Confer.Application.Meetings.Summary.SmartAiSummaryService>();
+
         return services;
     }
 }

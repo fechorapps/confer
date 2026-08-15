@@ -26,6 +26,7 @@ public sealed class Meeting
     public ICollection<MeetingRecording> Recordings { get; private set; } = new List<MeetingRecording>();
     public ICollection<Poll> Polls { get; private set; } = new List<Poll>();
     public ICollection<BreakoutRoom> BreakoutRooms { get; private set; } = new List<BreakoutRoom>();
+    public MeetingSummary? Summary { get; private set; }
 
     private Meeting() { }
 
@@ -242,6 +243,43 @@ public sealed class Meeting
 
         EndedAt = DateTime.UtcNow;
         return Result.Success();
+    }
+
+    public Result<MeetingSummary> AddSummary(
+        string overview,
+        List<string>? keyDecisions = null,
+        List<ActionItem>? actionItems = null,
+        int durationMinutes = 0,
+        int participantCount = 0)
+    {
+        if (!EndedAt.HasValue)
+            return Result.Failure<MeetingSummary>(MeetingErrors.MeetingNotEnded);
+
+        var summaryResult = MeetingSummary.Create(
+            Id,
+            overview,
+            keyDecisions,
+            actionItems,
+            durationMinutes,
+            participantCount);
+
+        if (summaryResult.IsFailure)
+            return summaryResult;
+
+        Summary = summaryResult.Value;
+        return Result.Success(Summary);
+    }
+
+    public Result<MeetingSummary> AddSummary(MeetingSummary summary)
+    {
+        if (summary is null)
+            return Result.Failure<MeetingSummary>(Error.Validation("MeetingSummary.Null", "Summary cannot be null."));
+
+        if (!EndedAt.HasValue)
+            return Result.Failure<MeetingSummary>(MeetingErrors.MeetingNotEnded);
+
+        Summary = summary;
+        return Result.Success(summary);
     }
 
     private static string GenerateJoinCode()
