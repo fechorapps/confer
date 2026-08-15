@@ -211,7 +211,10 @@ fn render_safety_modals(app: &mut ConferApp, ui: &mut Ui, full_rect: Rect) {
     }
 
     // 2. Kick Participant Confirmation Modal
-    if let Some((target_id, target_name)) = app.kick_confirmation_target.clone() {
+    let mut kick_modal_close = false;
+    let mut kick_modal_confirm: Option<Uuid> = None;
+    if let Some((target_id, target_name)) = &app.kick_confirmation_target {
+        let target_id = *target_id;
         // Dim background overlay
         ui.painter().rect_filled(full_rect, 0.0, Color32::from_rgba_premultiplied(0, 0, 0, 180));
 
@@ -239,11 +242,10 @@ fn render_safety_modals(app: &mut ConferApp, ui: &mut Ui, full_rect: Rect) {
                             ui.horizontal(|ui| {
                                 ui.columns(2, |cols| {
                                     if cols[0].add_sized(Vec2::new(cols[0].available_width(), 34.0), egui::Button::new(RichText::new("Cancelar (Esc)").size(12.0).color(Color32::WHITE)).fill(Color32::from_rgb(38, 42, 48)).rounding(8.0)).clicked() {
-                                        app.kick_confirmation_target = None;
+                                        kick_modal_close = true;
                                     }
                                     if cols[1].add_sized(Vec2::new(cols[1].available_width(), 34.0), egui::Button::new(RichText::new("🚫 Expulsar").size(12.0).strong().color(Color32::WHITE)).fill(Color32::from_rgb(225, 29, 72)).rounding(8.0)).clicked() {
-                                        app.host_kick_participant(target_id);
-                                        app.kick_confirmation_target = None;
+                                        kick_modal_confirm = Some(target_id);
                                     }
                                 });
                             });
@@ -251,15 +253,24 @@ fn render_safety_modals(app: &mut ConferApp, ui: &mut Ui, full_rect: Rect) {
                     });
             });
     }
+
+    if kick_modal_close || kick_modal_confirm.is_some() {
+        app.kick_confirmation_target = None;
+    }
+    if let Some(id) = kick_modal_confirm {
+        app.host_kick_participant(id);
+    }
 }
 
 
 /// Renders the Presentation Stage when Screen Sharing is active
 fn render_screen_share_stage(app: &mut ConferApp, ui: &mut Ui) {
-    ui.horizontal(|ui| {
-        let stage_w = if app.roster.is_empty() { ui.available_width() } else { ui.available_width() - 240.0 };
-        let stage_h = ui.available_height() - 10.0;
+    let avail_w = ui.available_width();
+    let avail_h = ui.available_height();
+    let stage_w = if app.roster.is_empty() { avail_w.max(200.0) } else { (avail_w - 240.0).max(280.0) };
+    let stage_h = (avail_h - 10.0).max(180.0);
 
+    ui.horizontal(|ui| {
         // Big Screen Presentation Frame
         ui.vertical(|ui| {
             ui.set_width(stage_w);
@@ -294,16 +305,21 @@ fn render_screen_share_stage(app: &mut ConferApp, ui: &mut Ui) {
                                     app.start_native_screen_share();
                                 }
                             } else {
+                                let mut switch_to: Option<usize> = None;
                                 ui.menu_button(RichText::new("🔄 Switch Display").size(11.0).color(Color32::WHITE), |ui| {
                                     ui.set_min_width(200.0);
-                                    let displays = app.available_displays.clone();
-                                    for d in displays {
+                                    for (idx, d) in app.available_displays.iter().enumerate() {
                                         if ui.button(RichText::new(&d.label).size(11.0).color(Color32::WHITE)).clicked() {
-                                            app.start_screen_share(d);
+                                            switch_to = Some(idx);
                                             ui.close_menu();
                                         }
                                     }
                                 });
+                                if let Some(idx) = switch_to {
+                                    if let Some(d) = app.available_displays.get(idx).cloned() {
+                                        app.start_screen_share(d);
+                                    }
+                                }
                             }
                         });
                     });
@@ -318,13 +334,27 @@ fn render_screen_share_stage(app: &mut ConferApp, ui: &mut Ui) {
                 .rounding(10.0)
                 .inner_margin(0.0)
                 .show(ui, |ui| {
-                    let display_h = stage_h - 48.0;
+                    let display_h = (stage_h - 48.0).max(100.0);
                     ui.set_width(stage_w);
                     ui.set_height(display_h);
 
                     if let Some(tex) = &app.screen_share_texture {
+                        let tex_size = tex.size_vec2();
+                        let max_w = (stage_w - 8.0).max(20.0);
+                        let max_h = (display_h - 8.0).max(20.0);
+
+                        let aspect = if tex_size.y > 0.0 { tex_size.x / tex_size.y } else { 16.0 / 9.0 };
+                        let mut fit_w = max_w;
+                        let mut fit_h = fit_w / aspect;
+                        if fit_h > max_h {
+                            fit_h = max_h;
+                            fit_w = fit_h * aspect;
+                        }
+                        let fit_w = fit_w.max(10.0);
+                        let fit_h = fit_h.max(10.0);
+
                         ui.centered_and_justified(|ui| {
-                            ui.image((tex.id(), Vec2::new(stage_w - 4.0, display_h - 4.0)));
+                            ui.image((tex.id(), Vec2::new(fit_w, fit_h)));
                         });
                     } else {
                         ui.vertical_centered(|ui| {
@@ -391,35 +421,8 @@ fn render_screen_share_stage(app: &mut ConferApp, ui: &mut Ui) {
 
 fn render_video_grid(app: &ConferApp, ui: &mut Ui) {
     let grid_rect = ui.available_rect_before_wrap();
-    let mut total_participants = Vec::new();
+    let count = app.roster.len() + 1;
 
-    // Local participant tile
-    total_participants.push((
-        app.my_participant_id.unwrap_or(Uuid::nil()),
-        app.user_display_name.clone(),
-        app.my_role.clone(),
-        app.is_mic_muted,
-        app.is_camera_off,
-        app.is_screen_sharing,
-        app.is_hand_raised,
-        true // is_local
-    ));
-
-    // Remote participants
-    for p in &app.roster {
-        total_participants.push((
-            p.participant_id,
-            p.display_name.clone(),
-            p.role.clone(),
-            p.is_audio_muted,
-            p.is_video_muted,
-            p.is_screen_sharing,
-            p.is_hand_raised,
-            false // is_local
-        ));
-    }
-
-    let count = total_participants.len();
     let (cols, rows) = match count {
         1 => (1, 1),
         2 => (2, 1),
@@ -433,27 +436,48 @@ fn render_video_grid(app: &ConferApp, ui: &mut Ui) {
     let tile_w = (avail_size.x / cols as f32) - 10.0;
     let tile_h = (avail_size.y / rows as f32) - 10.0;
 
+    // Build tile views by reference — no per-frame String clones
+    let mut tiles: Vec<TileProps<'_>> = Vec::with_capacity(count);
+
+    // Local participant tile
+    tiles.push(TileProps {
+        width: tile_w,
+        height: tile_h,
+        name: &app.user_display_name,
+        role: &app.my_role,
+        is_audio_muted: app.is_mic_muted,
+        is_video_muted: app.is_camera_off,
+        is_sharing: app.is_screen_sharing,
+        is_hand_raised: app.is_hand_raised,
+        is_local: true,
+        is_active_speaker: app
+            .my_participant_id
+            .is_some_and(|id| app.active_speaker_ids.contains(&id)),
+        local_texture: app.local_video_texture.as_ref(),
+    });
+
+    // Remote participants
+    for p in &app.roster {
+        tiles.push(TileProps {
+            width: tile_w,
+            height: tile_h,
+            name: &p.display_name,
+            role: &p.role,
+            is_audio_muted: p.is_audio_muted,
+            is_video_muted: p.is_video_muted,
+            is_sharing: p.is_screen_sharing,
+            is_hand_raised: p.is_hand_raised,
+            is_local: false,
+            is_active_speaker: app.active_speaker_ids.contains(&p.participant_id),
+            local_texture: None,
+        });
+    }
+
     egui::Grid::new("video_tiles_grid")
         .spacing([10.0, 10.0])
         .show(ui, |ui| {
-            for (idx, (p_id, name, role, is_audio_muted, is_video_muted, is_sharing, is_hand_raised, is_local)) in total_participants.iter().enumerate() {
-                let is_active_speaker = app.active_speaker_ids.contains(p_id);
-
-                let props = TileProps {
-                    width: tile_w,
-                    height: tile_h,
-                    name,
-                    role,
-                    is_audio_muted: *is_audio_muted,
-                    is_video_muted: *is_video_muted,
-                    is_sharing: *is_sharing,
-                    is_hand_raised: *is_hand_raised,
-                    is_local: *is_local,
-                    is_active_speaker,
-                    local_texture: app.local_video_texture.as_ref(),
-                };
-
-                render_single_tile(ui, &props);
+            for (idx, props) in tiles.iter().enumerate() {
+                render_single_tile(ui, props);
 
                 if (idx + 1) % cols == 0 {
                     ui.end_row();

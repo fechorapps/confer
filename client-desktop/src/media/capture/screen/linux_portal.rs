@@ -51,11 +51,6 @@ impl ScreenCaptureBackend for PortalBackend {
         let last_error = Arc::new(Mutex::new(None));
         self.last_error = last_error.clone();
 
-        // Portal negotiation (including the interactive OS source-picker dialog,
-        // which can take an arbitrary amount of time) runs entirely on this
-        // background thread so it never blocks the caller — typically the UI
-        // thread. Failures are recorded in `last_error` for the caller to poll
-        // via `take_error()` instead of being returned synchronously.
         let handle = thread::spawn(move || {
             let rt = match Runtime::new() {
                 Ok(rt) => rt,
@@ -98,7 +93,14 @@ impl ScreenCaptureBackend for PortalBackend {
 
                 let response = start_response
                     .response()
-                    .map_err(|_| CaptureError::PortalCancelled)?;
+                    .map_err(|e| match e {
+                        ashpd::Error::Response(ashpd::desktop::ResponseError::Cancelled) => {
+                            CaptureError::PortalCancelled
+                        }
+                        other => CaptureError::PortalFailed(format!(
+                            "Failed to read portal start response: {other}"
+                        )),
+                    })?;
 
                 let stream = response
                     .streams()
@@ -217,11 +219,6 @@ fn capture_pipewire_loop(node_id: u32, sink: FrameSink, is_running: Arc<AtomicBo
         .add_local_listener_with_user_data(user_data)
         .state_changed(move |_stream, _user_data, _old, new| {
             tracing::debug!("PipeWire screencast stream state changed: {:?}", new);
-            // If the stream errors out or the compositor tears down the
-            // session, no further buffers will ever arrive, so `process`
-            // (the only other place that checks `is_running` and can quit
-            // the loop) would never run again. Quit here instead, or
-            // `stop()` would otherwise wait out its full join timeout.
             match new {
                 pipewire::stream::StreamState::Error(ref msg) => {
                     tracing::warn!("PipeWire screencast stream error: {msg}");
@@ -260,17 +257,27 @@ fn capture_pipewire_loop(node_id: u32, sink: FrameSink, is_running: Arc<AtomicBo
                 if let Some(data) = datas.first_mut() {
                     let chunk_size = data.chunk().size() as usize;
                     if let Some(slice) = data.data() {
-                        let w = user_data.width;
-                        let h = user_data.height;
+                        let w = user_data.width.max(1);
+                        let h = user_data.height.max(1);
                         let expected_size = w * h * 4;
 
-                        // Default SPA screen buffer is BGRx
-                        if chunk_size >= expected_size {
-                            if let Some(pixels) = convert::bgrx_to_color32(slice, w, h) {
-                                user_data.frame_seq += 1;
-                                if let Ok(mut guard) = user_data.sink.lock() {
-                                    *guard = Some((user_data.frame_seq, ColorImage { size: [w, h], pixels }));
-                                }
+                        let (actual_w, actual_h) = if chunk_size >= expected_size {
+                            (w, h)
+                        } else if chunk_size >= 4 {
+                            let total_px = chunk_size / 4;
+                            if total_px >= w {
+                                (w, total_px / w)
+                            } else {
+                                (w, h)
+                            }
+                        } else {
+                            (w, h)
+                        };
+
+                        if let Some(pixels) = convert::bgrx_to_color32(slice, actual_w, actual_h) {
+                            user_data.frame_seq += 1;
+                            if let Ok(mut guard) = user_data.sink.lock() {
+                                *guard = Some((user_data.frame_seq, Arc::new(ColorImage { size: [actual_w, actual_h], pixels })));
                             }
                         }
                     }
@@ -288,7 +295,18 @@ fn capture_pipewire_loop(node_id: u32, sink: FrameSink, is_running: Arc<AtomicBo
     mainloop.run();
 }
 
-fn parse_video_dimensions(_param: &Pod) -> Option<(usize, usize)> {
-    // Default fallback resolution; updated dynamically on param negotiation
-    Some((1920, 1080))
+fn parse_video_dimensions(param: &Pod) -> Option<(usize, usize)> {
+    use pipewire::spa::param::format::FormatProperties;
+    use pipewire::spa::utils::Id;
+
+    if let Ok(object) = param.as_object() {
+        if let Some(prop) = object.find_prop(Id(FormatProperties::VideoSize.0)) {
+            if let Ok(rect) = prop.value().get_rectangle() {
+                if rect.width > 0 && rect.height > 0 {
+                    return Some((rect.width as usize, rect.height as usize));
+                }
+            }
+        }
+    }
+    None
 }

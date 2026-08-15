@@ -2,9 +2,9 @@ use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use egui::{Color32, Pos2, TextureHandle, Visuals};
 use tokio::runtime::Runtime;
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use crate::media::background::BackgroundEffect;
 use crate::media::filters::VideoFilter;
 use crate::media::virtual_background::VirtualBackgroundMode;
 use crate::media::{detect_displays, CameraCapturer, DisplayInfo, PickerMode, ScreenCapturer};
@@ -37,6 +37,23 @@ pub struct ActiveReaction {
     pub created_at: Instant,
 }
 
+/// Which async connect flow to run: create a new meeting or join by code.
+pub enum ConnectAction {
+    Create { title: String },
+    Join { code: String },
+}
+
+/// Result of the full async login → create/join → signaling-connect flow,
+/// delivered back to the UI thread through `connect_rx`.
+pub struct ConnectSuccess {
+    pub user_id: Uuid,
+    pub participant_id: Uuid,
+    pub join_code: String,
+    pub room_title: String,
+    pub role: String,
+    pub client: ConferClient,
+}
+
 pub struct ConferApp {
     pub view_state: ViewState,
     pub server_url: String,
@@ -61,6 +78,8 @@ pub struct ConferApp {
     pub join_code_input: String,
     pub mic_test_level: f32,
     pub error_message: Option<String>,
+    /// True while the async login → create/join → signaling-connect flow runs.
+    pub is_connecting: bool,
 
     // In-Meeting State
     pub current_meeting_id: Option<Uuid>,
@@ -82,7 +101,6 @@ pub struct ConferApp {
     pub is_ai_denoise_enabled: bool,
     pub virtual_bg_mode: VirtualBackgroundMode,
     pub active_filter: VideoFilter,
-    pub active_background: BackgroundEffect,
 
     // Video Engine
     pub camera_capturer: CameraCapturer,
@@ -139,6 +157,8 @@ pub struct ConferApp {
     // Networking
     pub client: ConferClient,
     pub tokio_rt: Runtime,
+    /// Receives the outcome of the spawned connect flow (drained in `update()`).
+    pub connect_rx: Option<mpsc::UnboundedReceiver<Result<ConnectSuccess, String>>>,
 }
 
 impl ConferApp {
@@ -146,6 +166,8 @@ impl ConferApp {
         let tokio_rt = Runtime::new().expect("Failed to create Tokio runtime");
         let server_url = "http://localhost:5100".to_string();
         let client = ConferClient::new(&server_url);
+        let available_displays = detect_displays();
+        let selected_display = available_displays.first().cloned();
 
         Self {
             view_state: ViewState::Lobby,
@@ -167,6 +189,7 @@ impl ConferApp {
             join_code_input: "".to_string(),
             mic_test_level: 0.35,
             error_message: None,
+            is_connecting: false,
 
             current_meeting_id: None,
             current_join_code: None,
@@ -186,14 +209,13 @@ impl ConferApp {
             is_ai_denoise_enabled: true,
             virtual_bg_mode: VirtualBackgroundMode::None,
             active_filter: VideoFilter::None,
-            active_background: BackgroundEffect::None,
 
             camera_capturer: CameraCapturer::new(320, 180),
             local_video_texture: None,
             last_rendered_frame_id: 0,
 
-            available_displays: detect_displays(),
-            selected_display: detect_displays().into_iter().next(),
+            available_displays,
+            selected_display,
             screen_capturer: ScreenCapturer::new(),
             screen_share_texture: None,
             last_screen_frame_id: 0,
@@ -230,11 +252,13 @@ impl ConferApp {
             kick_confirmation_target: None,
             is_push_to_talk_active: false,
 
-            rtt_ms: 28,
+            // 0 = no RTT measurement yet (never report a fabricated value)
+            rtt_ms: 0,
             packet_loss_pct: 0.0,
 
             client,
             tokio_rt,
+            connect_rx: None,
         }
     }
 
@@ -253,114 +277,105 @@ impl ConferApp {
             .set_title("Choose Virtual Background Image")
             .pick_file()
         {
-            self.virtual_bg_mode = VirtualBackgroundMode::CustomImage(path.clone());
-            self.active_background = BackgroundEffect::Custom(path);
+            self.virtual_bg_mode = VirtualBackgroundMode::CustomImage(path);
             self.camera_capturer.set_background(self.virtual_bg_mode.clone());
         }
     }
 
     pub fn trigger_create_meeting(&mut self) {
-        self.error_message = None;
-        let server_url = self.server_url.clone();
-        let email = self.user_email.clone();
-        let name = self.user_display_name.clone();
         let title = self.meeting_title_input.clone();
-
-        let client = ConferClient::new(&server_url);
-
-        let result = self.tokio_rt.block_on(async {
-            let login = client.dev_login(&email, &name).await?;
-            let created = client.create_meeting(&title, login.user_id, 50).await?;
-            let join = client.join_meeting(created.id, login.user_id, &name).await?;
-            Ok::<(Uuid, Uuid, String, String, String, String), crate::sdk::SdkError>((
-                login.user_id,
-                join.participant_id,
-                created.join_code,
-                created.title,
-                join.role,
-                join.room_token,
-            ))
-        });
-
-        match result {
-            Ok((user_id, part_id, join_code, room_title, role, token)) => {
-                self.my_user_id = Some(user_id);
-                self.my_participant_id = Some(part_id);
-                self.current_join_code = Some(join_code);
-                self.room_title = room_title;
-                self.my_role = role;
-
-                self.client.server_url = self.server_url.clone();
-                let mut ws_client = ConferClient::new(&self.server_url);
-                let connect_res = self.tokio_rt.block_on(async {
-                    ws_client.connect_signaling(&token).await
-                });
-
-                if let Err(e) = connect_res {
-                    self.error_message = Some(format!("Signaling connection error: {e}"));
-                    return;
-                }
-
-                self.client = ws_client;
-                self.view_state = ViewState::MeetingRoom;
-            }
-            Err(e) => {
-                self.error_message = Some(e.to_string());
-            }
-        }
+        self.spawn_meeting_connect(ConnectAction::Create { title });
     }
 
     pub fn trigger_join_meeting(&mut self) {
         self.error_message = None;
-        if self.join_code_input.trim().is_empty() {
+        let code = self.join_code_input.trim().to_string();
+        if code.is_empty() {
             self.error_message = Some("Please enter a meeting code.".to_string());
             return;
         }
+        self.spawn_meeting_connect(ConnectAction::Join { code });
+    }
+
+    /// Spawns the full login → create/join → signaling-connect flow on the
+    /// Tokio runtime so the UI thread never blocks; the outcome arrives
+    /// through `connect_rx` and is applied in `poll_connect_result`.
+    fn spawn_meeting_connect(&mut self, action: ConnectAction) {
+        self.error_message = None;
+        if self.is_connecting {
+            return;
+        }
+        self.is_connecting = true;
 
         let server_url = self.server_url.clone();
         let email = self.user_email.clone();
         let name = self.user_display_name.clone();
-        let code = self.join_code_input.trim().to_string();
 
-        let client = ConferClient::new(&server_url);
+        let (tx, rx) = mpsc::unbounded_channel();
+        self.connect_rx = Some(rx);
 
-        let result = self.tokio_rt.block_on(async {
-            let login = client.dev_login(&email, &name).await?;
-            let meeting_info = client.get_meeting_by_code(&code).await?;
-            let join = client.join_meeting(meeting_info.id, login.user_id, &name).await?;
-            Ok::<(Uuid, Uuid, String, String, String, String), crate::sdk::SdkError>((
-                login.user_id,
-                join.participant_id,
-                meeting_info.join_code,
-                meeting_info.title,
-                join.role,
-                join.room_token,
-            ))
+        self.tokio_rt.spawn(async move {
+            let outcome: Result<ConnectSuccess, String> = async {
+                let client = ConferClient::new(&server_url);
+                let login = client.dev_login(&email, &name).await.map_err(|e| e.to_string())?;
+
+                let (meeting_id, join_code, room_title) = match action {
+                    ConnectAction::Create { title } => {
+                        let created = client.create_meeting(&title, login.user_id, 50).await.map_err(|e| e.to_string())?;
+                        (created.id, created.join_code, created.title)
+                    }
+                    ConnectAction::Join { code } => {
+                        let meeting_info = client.get_meeting_by_code(&code).await.map_err(|e| e.to_string())?;
+                        (meeting_info.id, meeting_info.join_code, meeting_info.title)
+                    }
+                };
+
+                let join = client.join_meeting(meeting_id, login.user_id, &name).await.map_err(|e| e.to_string())?;
+
+                let mut ws_client = ConferClient::new(&server_url);
+                ws_client.connect_signaling(&join.room_token).await
+                    .map_err(|e| format!("Signaling connection error: {e}"))?;
+
+                Ok(ConnectSuccess {
+                    user_id: login.user_id,
+                    participant_id: join.participant_id,
+                    join_code,
+                    room_title,
+                    role: join.role,
+                    client: ws_client,
+                })
+            }.await;
+
+            let _ = tx.send(outcome);
         });
+    }
 
-        match result {
-            Ok((user_id, part_id, join_code, room_title, role, token)) => {
-                self.my_user_id = Some(user_id);
-                self.my_participant_id = Some(part_id);
-                self.current_join_code = Some(join_code);
-                self.room_title = room_title;
-                self.my_role = role;
+    /// Drains the connect-flow outcome channel (called from `update()`).
+    fn poll_connect_result(&mut self) {
+        let Some(rx) = &mut self.connect_rx else { return; };
+        let outcome = match rx.try_recv() {
+            Ok(outcome) => outcome,
+            Err(mpsc::error::TryRecvError::Empty) => return,
+            Err(mpsc::error::TryRecvError::Disconnected) => {
+                Err("Connection task terminated unexpectedly.".to_string())
+            }
+        };
 
-                let mut ws_client = ConferClient::new(&self.server_url);
-                let connect_res = self.tokio_rt.block_on(async {
-                    ws_client.connect_signaling(&token).await
-                });
+        self.connect_rx = None;
+        self.is_connecting = false;
 
-                if let Err(e) = connect_res {
-                    self.error_message = Some(format!("Signaling connection error: {e}"));
-                    return;
-                }
-
-                self.client = ws_client;
+        match outcome {
+            Ok(success) => {
+                self.my_user_id = Some(success.user_id);
+                self.my_participant_id = Some(success.participant_id);
+                self.current_join_code = Some(success.join_code);
+                self.room_title = success.room_title;
+                self.my_role = success.role;
+                self.client = success.client;
                 self.view_state = ViewState::MeetingRoom;
             }
-            Err(e) => {
-                self.error_message = Some(e.to_string());
+            Err(message) => {
+                self.error_message = Some(message);
             }
         }
     }
@@ -451,15 +466,20 @@ impl ConferApp {
     }
 
     pub fn send_reaction(&mut self, emoji: &str) {
-        let x_offset = (rand_float() - 0.5) * 200.0;
-        self.active_reactions.push(ActiveReaction {
-            emoji: emoji.to_string(),
-            x_offset,
-            created_at: Instant::now(),
-        });
+        self.spawn_reaction(emoji.to_string());
 
         self.client.send_message(ClientMessage::Reaction {
             emoji: emoji.to_string(),
+        });
+    }
+
+    /// Pushes a locally-rendered floating reaction animation.
+    fn spawn_reaction(&mut self, emoji: String) {
+        let x_offset = (rand_float() - 0.5) * 200.0;
+        self.active_reactions.push(ActiveReaction {
+            emoji,
+            x_offset,
+            created_at: Instant::now(),
         });
     }
 
@@ -870,30 +890,32 @@ impl ConferApp {
                     }
                 }
                 ServerMessage::ActiveSpeakers { ranked } => {
-                    self.active_speaker_ids.clear();
-                    for spk in ranked {
-                        self.active_speaker_ids.insert(spk.participant_id);
-                    }
+                    self.active_speaker_ids = ranked.into_iter()
+                        .map(|spk| spk.participant_id)
+                        .collect();
                 }
                 ServerMessage::Chat { id, from_id, from_name, body, sent_at } => {
+                    // sent_at is a server-provided RFC3339 timestamp: parse it
+                    // safely instead of slicing bytes (which could panic on
+                    // short strings or non-UTF-8 boundaries).
+                    let sent_at_hhmm = chrono::DateTime::parse_from_rfc3339(&sent_at)
+                        .map(|dt| dt.format("%H:%M").to_string())
+                        .unwrap_or_else(|_| {
+                            sent_at.get(11..16).unwrap_or(sent_at.as_str()).to_string()
+                        });
                     self.chat_messages.push(ChatMessageDto {
                         id,
                         from_id,
                         from_name,
                         body,
-                        sent_at: sent_at[11..16.min(sent_at.len())].to_string(), // HH:MM
+                        sent_at: sent_at_hhmm, // HH:MM
                     });
                     if !self.show_chat {
                         self.unread_chat_count += 1;
                     }
                 }
                 ServerMessage::Reaction { emoji, .. } => {
-                    let x_offset = (rand_float() - 0.5) * 200.0;
-                    self.active_reactions.push(ActiveReaction {
-                        emoji,
-                        x_offset,
-                        created_at: Instant::now(),
-                    });
+                    self.spawn_reaction(emoji);
                 }
                 ServerMessage::CaptionBroadcast { participant_id, speaker_name, text, is_final, language, timestamp_ms } => {
                     self.add_caption_chunk(CaptionChunkDto {
@@ -967,10 +989,19 @@ impl ConferApp {
                     self.leave_meeting();
                 }
                 ServerMessage::Pong { .. } => {
-                    // Update RTT
-                    self.rtt_ms = 25;
+                    // TODO: measure real RTT. The SDK reader task
+                    // (sdk/client.rs) sends `Ping` every 5s without exposing
+                    // the send `Instant`, so app.rs cannot compute RTT here.
+                    // Until the SDK surfaces ping timestamps, leave the last
+                    // value untouched instead of reporting a fake constant.
                 }
-                _ => {}
+                ServerMessage::Error { code, message } => {
+                    tracing::warn!("Server error {code}: {message}");
+                    self.error_message = Some(format!("{code}: {message}"));
+                }
+                unhandled => {
+                    tracing::debug!("Ignoring unimplemented server message: {unhandled:?}");
+                }
             }
         }
     }
@@ -985,6 +1016,7 @@ impl eframe::App for ConferApp {
         visuals.selection.bg_fill = Color32::from_rgb(2, 132, 199);
         ctx.set_visuals(visuals);
 
+        self.poll_connect_result();
         self.poll_incoming_messages();
         self.handle_global_shortcuts(ctx);
 
@@ -1003,12 +1035,16 @@ impl eframe::App for ConferApp {
 
         // Update real-time screen share texture
         if self.is_screen_sharing {
-            // Backends that negotiate off-thread (e.g. the portal backend, so
-            // its interactive picker dialog never blocks this UI thread) can
-            // only report a failed start asynchronously; pick that up here.
             if let Some(err) = self.screen_capturer.take_error() {
-                tracing::warn!("Screen capture failed: {err}");
-                self.error_message = Some(format!("Screen share failed: {err}"));
+                match err {
+                    crate::media::CaptureError::PortalCancelled => {
+                        tracing::info!("User cancelled screen share picker dialog");
+                    }
+                    other => {
+                        tracing::warn!("Screen capture failed: {other}");
+                        self.error_message = Some(format!("Screen share error: {other}"));
+                    }
+                }
                 self.is_screen_sharing = false;
                 self.screen_share_texture = None;
                 self.last_screen_frame_id = 0;
@@ -1043,7 +1079,18 @@ impl eframe::App for ConferApp {
     }
 }
 
+/// Pseudo-random float in [0, 1) for cosmetic reaction placement.
+/// The `rand` crate is not a dependency, so this hashes a monotonically
+/// increasing atomic counter (splitmix64-style) — no clock reads, no unwrap.
 fn rand_float() -> f32 {
-    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos();
-    (nanos % 1000) as f32 / 1000.0
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0x9E3779B97F4A7C15);
+
+    let mut x = COUNTER.fetch_add(0x9E3779B97F4A7C15, Ordering::Relaxed);
+    x ^= x >> 30;
+    x = x.wrapping_mul(0xBF58476D1CE4E5B9);
+    x ^= x >> 27;
+    x = x.wrapping_mul(0x94D049BB133111EB);
+    x ^= x >> 31;
+    (x % 1000) as f32 / 1000.0
 }

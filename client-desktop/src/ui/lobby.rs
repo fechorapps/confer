@@ -78,8 +78,10 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
 
                                 if !app.is_camera_off {
                                     if let Some(tex) = &app.local_video_texture {
+                                        let prev_w = (col_w - 34.0).max(10.0);
+                                        let prev_h = (viewport_h - 2.0).max(10.0);
                                         ui.centered_and_justified(|ui| {
-                                            ui.image((tex.id(), Vec2::new(col_w - 34.0, viewport_h - 2.0)));
+                                            ui.image((tex.id(), Vec2::new(prev_w, prev_h)));
                                         });
                                     }
                                 } else {
@@ -107,13 +109,13 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
                             let cam_bg = if app.is_camera_off { Color32::from_rgb(225, 29, 72) } else { Color32::from_rgb(26, 29, 33) };
                             let cam_label = if app.is_camera_off { "📷 Camera Off" } else { "🎥 Camera On" };
                             if ui.add(egui::Button::new(RichText::new(cam_label).size(12.0).color(Color32::WHITE)).fill(cam_bg).rounding(6.0)).clicked() {
-                                app.is_camera_off = !app.is_camera_off;
+                                app.toggle_camera();
                             }
 
                             let mic_bg = if app.is_mic_muted { Color32::from_rgb(225, 29, 72) } else { Color32::from_rgb(26, 29, 33) };
                             let mic_label = if app.is_mic_muted { "🔇 Mic Muted" } else { "🎙 Mic Active" };
                             if ui.add(egui::Button::new(RichText::new(mic_label).size(12.0).color(Color32::WHITE)).fill(mic_bg).rounding(6.0)).clicked() {
-                                app.is_mic_muted = !app.is_mic_muted;
+                                app.toggle_mic();
                             }
 
                             let denoise_bg = if app.is_ai_denoise_enabled { Color32::from_rgb(2, 132, 199) } else { Color32::from_rgb(26, 29, 33) };

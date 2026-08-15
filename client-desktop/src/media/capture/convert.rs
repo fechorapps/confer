@@ -5,7 +5,7 @@ use rayon::prelude::*;
 /// `Color32` pixels. Returns `None` if `raw` is smaller than `width * height * 3`
 /// bytes, so callers can skip a truncated/corrupt frame instead of panicking.
 pub(crate) fn rgb_to_color32(raw: &[u8], width: usize, height: usize) -> Option<Vec<Color32>> {
-    if raw.len() < width * height * 3 {
+    if width == 0 || height == 0 || raw.len() < width * height * 3 {
         return None;
     }
 
@@ -14,7 +14,9 @@ pub(crate) fn rgb_to_color32(raw: &[u8], width: usize, height: usize) -> Option<
         let row_offset = row_y * width * 3;
         for (col_x, px) in row_pixels.iter_mut().enumerate() {
             let idx = row_offset + col_x * 3;
-            *px = Color32::from_rgb(raw[idx], raw[idx + 1], raw[idx + 2]);
+            if idx + 2 < raw.len() {
+                *px = Color32::from_rgb(raw[idx], raw[idx + 1], raw[idx + 2]);
+            }
         }
     });
     Some(pixels)
@@ -25,7 +27,7 @@ pub(crate) fn rgb_to_color32(raw: &[u8], width: usize, height: usize) -> Option<
 /// `Color32` pixels. Returns `None` if `raw` is smaller than
 /// `width * height * 4` bytes.
 pub(crate) fn bgrx_to_color32(raw: &[u8], width: usize, height: usize) -> Option<Vec<Color32>> {
-    if raw.len() < width * height * 4 {
+    if width == 0 || height == 0 || raw.len() < width * height * 4 {
         return None;
     }
 
@@ -34,7 +36,9 @@ pub(crate) fn bgrx_to_color32(raw: &[u8], width: usize, height: usize) -> Option
         let row_offset = row_y * width * 4;
         for (col_x, px) in row_pixels.iter_mut().enumerate() {
             let idx = row_offset + col_x * 4;
-            *px = Color32::from_rgb(raw[idx + 2], raw[idx + 1], raw[idx]);
+            if idx + 2 < raw.len() {
+                *px = Color32::from_rgb(raw[idx + 2], raw[idx + 1], raw[idx]);
+            }
         }
     });
     Some(pixels)
