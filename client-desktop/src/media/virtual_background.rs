@@ -1,7 +1,7 @@
-use std::cell::RefCell;
-use std::path::{Path, PathBuf};
 use egui::Color32;
 use rayon::prelude::*;
+use std::cell::RefCell;
+use std::path::{Path, PathBuf};
 
 /// Virtual background replacement modes for video feeds.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -23,22 +23,22 @@ impl VirtualBackgroundMode {
             VirtualBackgroundMode::Blur,
             VirtualBackgroundMode::PresetOffice,
             VirtualBackgroundMode::PresetStudio,
-            VirtualBackgroundMode::CustomColor([30, 41, 59]),  // Deep slate
-            VirtualBackgroundMode::CustomColor([15, 23, 42]),  // Dark obsidian
+            VirtualBackgroundMode::CustomColor([30, 41, 59]), // Deep slate
+            VirtualBackgroundMode::CustomColor([15, 23, 42]), // Dark obsidian
             VirtualBackgroundMode::CustomColor([34, 197, 94]), // Studio green screen
         ]
     }
 
-    /// User-friendly display label with icon.
+    /// User-friendly display label with clean typography.
     pub fn label(&self) -> String {
         match self {
-            Self::None => "None (Normal)".to_string(),
-            Self::Blur => "Gaussian Blur 🌫️".to_string(),
-            Self::PresetOffice => "Modern Office 🏢".to_string(),
-            Self::PresetStudio => "Executive Studio 🌌".to_string(),
-            Self::CustomColor([34, 197, 94]) => "Green Screen 🟩".to_string(),
-            Self::CustomColor([r, g, b]) => format!("Custom Color (#{r:02X}{g:02X}{b:02X}) 🎨"),
-            Self::CustomImage(_) => "Custom Photo 📁".to_string(),
+            Self::None => "None".to_string(),
+            Self::Blur => "Portrait Blur".to_string(),
+            Self::PresetOffice => "Modern Office".to_string(),
+            Self::PresetStudio => "Executive Studio".to_string(),
+            Self::CustomColor([34, 197, 94]) => "Green Screen".to_string(),
+            Self::CustomColor([r, g, b]) => format!("Color #{r:02X}{g:02X}{b:02X}"),
+            Self::CustomImage(_) => "Custom Photo".to_string(),
         }
     }
 }
@@ -74,12 +74,19 @@ impl CachedCustomImage {
     fn load(path: &Path, width: usize, height: usize) -> Self {
         let rgb = match image::open(path) {
             Ok(img) => Some(
-                img.resize_exact(width as u32, height as u32, image::imageops::FilterType::Nearest)
-                    .to_rgb8()
-                    .into_raw(),
+                img.resize_exact(
+                    width as u32,
+                    height as u32,
+                    image::imageops::FilterType::Nearest,
+                )
+                .to_rgb8()
+                .into_raw(),
             ),
             Err(e) => {
-                tracing::warn!("Failed to load custom virtual background image {}: {e}", path.display());
+                tracing::warn!(
+                    "Failed to load custom virtual background image {}: {e}",
+                    path.display()
+                );
                 None
             }
         };
@@ -113,14 +120,18 @@ impl VirtualBackgroundProcessor {
         let head_cy = cy - h * 0.056;
         let head_rx = w * 0.18;
         let head_ry = h * 0.28;
-        let head_dist = (((x - head_cx).powi(2) / head_rx.powi(2)) + ((y - head_cy).powi(2) / head_ry.powi(2))).sqrt();
+        let head_dist = (((x - head_cx).powi(2) / head_rx.powi(2))
+            + ((y - head_cy).powi(2) / head_ry.powi(2)))
+        .sqrt();
 
         // Torso / shoulder trapezoid mask
         let body_cx = cx;
         let body_cy = cy + h * 0.167;
         let body_rx = w * 0.38;
         let body_ry = h * 0.42;
-        let body_dist = (((x - body_cx).powi(2) / body_rx.powi(2)) + ((y - body_cy).powi(2) / body_ry.powi(2))).sqrt();
+        let body_dist = (((x - body_cx).powi(2) / body_rx.powi(2))
+            + ((y - body_cy).powi(2) / body_ry.powi(2)))
+        .sqrt();
 
         // Smooth sigmoid transition edge
         let head_alpha = (1.0 - (head_dist - 0.85) * 5.0).clamp(0.0, 1.0);
@@ -153,7 +164,13 @@ impl VirtualBackgroundProcessor {
     /// Performs a high-performance separable 2D Gaussian blur across RGBA pixel buffers.
     ///
     /// Utilizes a 1D horizontal pass followed by a 1D vertical pass parallelized across CPU cores.
-    pub fn gaussian_blur(&self, input: &[Color32], width: usize, height: usize, radius: usize) -> Vec<Color32> {
+    pub fn gaussian_blur(
+        &self,
+        input: &[Color32],
+        width: usize,
+        height: usize,
+        radius: usize,
+    ) -> Vec<Color32> {
         if width == 0 || height == 0 || input.is_empty() {
             return Vec::new();
         }
@@ -210,32 +227,36 @@ impl VirtualBackgroundProcessor {
 
         // Pass 2: Vertical 1D blur (temp -> output)
         let mut output = vec![Color32::BLACK; width * height];
-        output.par_chunks_mut(width).enumerate().for_each(|(y, row)| {
-            for (x, pixel) in row.iter_mut().enumerate().take(width) {
-                let mut r_acc = 0.0f32;
-                let mut g_acc = 0.0f32;
-                let mut b_acc = 0.0f32;
-                let mut a_acc = 0.0f32;
+        output
+            .par_chunks_mut(width)
+            .enumerate()
+            .for_each(|(y, row)| {
+                for (x, pixel) in row.iter_mut().enumerate().take(width) {
+                    let mut r_acc = 0.0f32;
+                    let mut g_acc = 0.0f32;
+                    let mut b_acc = 0.0f32;
+                    let mut a_acc = 0.0f32;
 
-                for (k_idx, k_offset) in (-(radius as isize)..=(radius as isize)).enumerate() {
-                    let sample_y = (y as isize + k_offset).clamp(0, height as isize - 1) as usize;
-                    let px = temp[sample_y * width + x];
-                    let weight = kernel[k_idx];
+                    for (k_idx, k_offset) in (-(radius as isize)..=(radius as isize)).enumerate() {
+                        let sample_y =
+                            (y as isize + k_offset).clamp(0, height as isize - 1) as usize;
+                        let px = temp[sample_y * width + x];
+                        let weight = kernel[k_idx];
 
-                    r_acc += px.r() as f32 * weight;
-                    g_acc += px.g() as f32 * weight;
-                    b_acc += px.b() as f32 * weight;
-                    a_acc += px.a() as f32 * weight;
+                        r_acc += px.r() as f32 * weight;
+                        g_acc += px.g() as f32 * weight;
+                        b_acc += px.b() as f32 * weight;
+                        a_acc += px.a() as f32 * weight;
+                    }
+
+                    *pixel = Color32::from_rgba_premultiplied(
+                        r_acc.clamp(0.0, 255.0) as u8,
+                        g_acc.clamp(0.0, 255.0) as u8,
+                        b_acc.clamp(0.0, 255.0) as u8,
+                        a_acc.clamp(0.0, 255.0) as u8,
+                    );
                 }
-
-                *pixel = Color32::from_rgba_premultiplied(
-                    r_acc.clamp(0.0, 255.0) as u8,
-                    g_acc.clamp(0.0, 255.0) as u8,
-                    b_acc.clamp(0.0, 255.0) as u8,
-                    a_acc.clamp(0.0, 255.0) as u8,
-                );
-            }
-        });
+            });
 
         output
     }
@@ -290,20 +311,27 @@ impl VirtualBackgroundProcessor {
                 let w_f = width as f32;
                 let h_f = height as f32;
 
-                pixels.par_chunks_mut(width).enumerate().for_each(|(y, row)| {
-                    let y_f = y as f32;
-                    let row_idx = y * width;
-                    for (x, px) in row.iter_mut().enumerate() {
-                        let alpha = Self::compute_portrait_alpha(x as f32, y_f, cx, cy, w_f, h_f);
-                        if alpha < 0.99 {
-                            let bg = blurred[row_idx + x];
-                            let r = (px.r() as f32 * alpha + bg.r() as f32 * (1.0 - alpha)) as u8;
-                            let g = (px.g() as f32 * alpha + bg.g() as f32 * (1.0 - alpha)) as u8;
-                            let b = (px.b() as f32 * alpha + bg.b() as f32 * (1.0 - alpha)) as u8;
-                            *px = Color32::from_rgba_premultiplied(r, g, b, px.a());
+                pixels
+                    .par_chunks_mut(width)
+                    .enumerate()
+                    .for_each(|(y, row)| {
+                        let y_f = y as f32;
+                        let row_idx = y * width;
+                        for (x, px) in row.iter_mut().enumerate() {
+                            let alpha =
+                                Self::compute_portrait_alpha(x as f32, y_f, cx, cy, w_f, h_f);
+                            if alpha < 0.99 {
+                                let bg = blurred[row_idx + x];
+                                let r =
+                                    (px.r() as f32 * alpha + bg.r() as f32 * (1.0 - alpha)) as u8;
+                                let g =
+                                    (px.g() as f32 * alpha + bg.g() as f32 * (1.0 - alpha)) as u8;
+                                let b =
+                                    (px.b() as f32 * alpha + bg.b() as f32 * (1.0 - alpha)) as u8;
+                                *px = Color32::from_rgba_premultiplied(r, g, b, px.a());
+                            }
                         }
-                    }
-                });
+                    });
             }
             VirtualBackgroundMode::PresetOffice => {
                 let cx = width as f32 / 2.0;
@@ -311,27 +339,37 @@ impl VirtualBackgroundProcessor {
                 let w_f = width as f32;
                 let h_f = height as f32;
 
-                pixels.par_chunks_mut(width).enumerate().for_each(|(y, row)| {
-                    let y_f = y as f32;
-                    for (x, px) in row.iter_mut().enumerate() {
-                        let x_f = x as f32;
-                        let alpha = Self::compute_portrait_alpha(x_f, y_f, cx, cy, w_f, h_f);
-                        if alpha < 0.99 {
-                            let dx = (x_f - cx) / w_f;
-                            let dy = (y_f - cy) / h_f;
-                            let panel = ((x_f * 0.05).sin() * 10.0 + (y_f * 0.02).cos() * 5.0) as i16;
+                pixels
+                    .par_chunks_mut(width)
+                    .enumerate()
+                    .for_each(|(y, row)| {
+                        let y_f = y as f32;
+                        for (x, px) in row.iter_mut().enumerate() {
+                            let x_f = x as f32;
+                            let alpha = Self::compute_portrait_alpha(x_f, y_f, cx, cy, w_f, h_f);
+                            if alpha < 0.99 {
+                                let dx = (x_f - cx) / w_f;
+                                let dy = (y_f - cy) / h_f;
+                                let panel =
+                                    ((x_f * 0.05).sin() * 10.0 + (y_f * 0.02).cos() * 5.0) as i16;
 
-                            let bg_r = (32.0 + dx * 20.0 + (panel as f32 * 0.3)).clamp(20.0, 70.0) as u8;
-                            let bg_g = (38.0 + dy * 15.0 + (panel as f32 * 0.4)).clamp(25.0, 80.0) as u8;
-                            let bg_b = (48.0 - dy * 10.0 + (panel as f32 * 0.6)).clamp(30.0, 95.0) as u8;
+                                let bg_r = (32.0 + dx * 20.0 + (panel as f32 * 0.3))
+                                    .clamp(20.0, 70.0)
+                                    as u8;
+                                let bg_g = (38.0 + dy * 15.0 + (panel as f32 * 0.4))
+                                    .clamp(25.0, 80.0)
+                                    as u8;
+                                let bg_b = (48.0 - dy * 10.0 + (panel as f32 * 0.6))
+                                    .clamp(30.0, 95.0)
+                                    as u8;
 
-                            let r = (px.r() as f32 * alpha + bg_r as f32 * (1.0 - alpha)) as u8;
-                            let g = (px.g() as f32 * alpha + bg_g as f32 * (1.0 - alpha)) as u8;
-                            let b = (px.b() as f32 * alpha + bg_b as f32 * (1.0 - alpha)) as u8;
-                            *px = Color32::from_rgba_premultiplied(r, g, b, px.a());
+                                let r = (px.r() as f32 * alpha + bg_r as f32 * (1.0 - alpha)) as u8;
+                                let g = (px.g() as f32 * alpha + bg_g as f32 * (1.0 - alpha)) as u8;
+                                let b = (px.b() as f32 * alpha + bg_b as f32 * (1.0 - alpha)) as u8;
+                                *px = Color32::from_rgba_premultiplied(r, g, b, px.a());
+                            }
                         }
-                    }
-                });
+                    });
             }
             VirtualBackgroundMode::PresetStudio => {
                 let cx = width as f32 / 2.0;
@@ -339,28 +377,31 @@ impl VirtualBackgroundProcessor {
                 let w_f = width as f32;
                 let h_f = height as f32;
 
-                pixels.par_chunks_mut(width).enumerate().for_each(|(y, row)| {
-                    let y_f = y as f32;
-                    let dy = (y_f - cy) / cy;
+                pixels
+                    .par_chunks_mut(width)
+                    .enumerate()
+                    .for_each(|(y, row)| {
+                        let y_f = y as f32;
+                        let dy = (y_f - cy) / cy;
 
-                    for (x, px) in row.iter_mut().enumerate() {
-                        let x_f = x as f32;
-                        let alpha = Self::compute_portrait_alpha(x_f, y_f, cx, cy, w_f, h_f);
-                        if alpha < 0.99 {
-                            let dx = (x_f - cx) / cx;
-                            let dist = (dx * dx + dy * dy).sqrt();
+                        for (x, px) in row.iter_mut().enumerate() {
+                            let x_f = x as f32;
+                            let alpha = Self::compute_portrait_alpha(x_f, y_f, cx, cy, w_f, h_f);
+                            if alpha < 0.99 {
+                                let dx = (x_f - cx) / cx;
+                                let dist = (dx * dx + dy * dy).sqrt();
 
-                            let bg_r = (10.0 + (1.0 - dist).max(0.0) * 15.0) as u8;
-                            let bg_g = (18.0 + (1.0 - dist).max(0.0) * 45.0) as u8;
-                            let bg_b = (32.0 + (1.0 - dist).max(0.0) * 80.0) as u8;
+                                let bg_r = (10.0 + (1.0 - dist).max(0.0) * 15.0) as u8;
+                                let bg_g = (18.0 + (1.0 - dist).max(0.0) * 45.0) as u8;
+                                let bg_b = (32.0 + (1.0 - dist).max(0.0) * 80.0) as u8;
 
-                            let r = (px.r() as f32 * alpha + bg_r as f32 * (1.0 - alpha)) as u8;
-                            let g = (px.g() as f32 * alpha + bg_g as f32 * (1.0 - alpha)) as u8;
-                            let b = (px.b() as f32 * alpha + bg_b as f32 * (1.0 - alpha)) as u8;
-                            *px = Color32::from_rgba_premultiplied(r, g, b, px.a());
+                                let r = (px.r() as f32 * alpha + bg_r as f32 * (1.0 - alpha)) as u8;
+                                let g = (px.g() as f32 * alpha + bg_g as f32 * (1.0 - alpha)) as u8;
+                                let b = (px.b() as f32 * alpha + bg_b as f32 * (1.0 - alpha)) as u8;
+                                *px = Color32::from_rgba_premultiplied(r, g, b, px.a());
+                            }
                         }
-                    }
-                });
+                    });
             }
             VirtualBackgroundMode::CustomColor([bg_r, bg_g, bg_b]) => {
                 let cx = width as f32 / 2.0;
@@ -369,18 +410,25 @@ impl VirtualBackgroundProcessor {
                 let h_f = height as f32;
                 let (r_val, g_val, b_val) = (*bg_r, *bg_g, *bg_b);
 
-                pixels.par_chunks_mut(width).enumerate().for_each(|(y, row)| {
-                    let y_f = y as f32;
-                    for (x, px) in row.iter_mut().enumerate() {
-                        let alpha = Self::compute_portrait_alpha(x as f32, y_f, cx, cy, w_f, h_f);
-                        if alpha < 0.99 {
-                            let r = (px.r() as f32 * alpha + r_val as f32 * (1.0 - alpha)) as u8;
-                            let g = (px.g() as f32 * alpha + g_val as f32 * (1.0 - alpha)) as u8;
-                            let b = (px.b() as f32 * alpha + b_val as f32 * (1.0 - alpha)) as u8;
-                            *px = Color32::from_rgba_premultiplied(r, g, b, px.a());
+                pixels
+                    .par_chunks_mut(width)
+                    .enumerate()
+                    .for_each(|(y, row)| {
+                        let y_f = y as f32;
+                        for (x, px) in row.iter_mut().enumerate() {
+                            let alpha =
+                                Self::compute_portrait_alpha(x as f32, y_f, cx, cy, w_f, h_f);
+                            if alpha < 0.99 {
+                                let r =
+                                    (px.r() as f32 * alpha + r_val as f32 * (1.0 - alpha)) as u8;
+                                let g =
+                                    (px.g() as f32 * alpha + g_val as f32 * (1.0 - alpha)) as u8;
+                                let b =
+                                    (px.b() as f32 * alpha + b_val as f32 * (1.0 - alpha)) as u8;
+                                *px = Color32::from_rgba_premultiplied(r, g, b, px.a());
+                            }
                         }
-                    }
-                });
+                    });
             }
             VirtualBackgroundMode::CustomImage(path) => {
                 // Reload the decoded/resized image only when the path or the
@@ -400,23 +448,30 @@ impl VirtualBackgroundProcessor {
                     let w_f = width as f32;
                     let h_f = height as f32;
 
-                    pixels.par_chunks_mut(width).enumerate().for_each(|(y, row)| {
-                        let y_f = y as f32;
-                        for (x, px) in row.iter_mut().enumerate() {
-                            let alpha = Self::compute_portrait_alpha(x as f32, y_f, cx, cy, w_f, h_f);
-                            if alpha < 0.99 {
-                                let bg_idx = (y * width + x) * 3;
-                                let bg_r = bg_raw[bg_idx];
-                                let bg_g = bg_raw[bg_idx + 1];
-                                let bg_b = bg_raw[bg_idx + 2];
+                    pixels
+                        .par_chunks_mut(width)
+                        .enumerate()
+                        .for_each(|(y, row)| {
+                            let y_f = y as f32;
+                            for (x, px) in row.iter_mut().enumerate() {
+                                let alpha =
+                                    Self::compute_portrait_alpha(x as f32, y_f, cx, cy, w_f, h_f);
+                                if alpha < 0.99 {
+                                    let bg_idx = (y * width + x) * 3;
+                                    let bg_r = bg_raw[bg_idx];
+                                    let bg_g = bg_raw[bg_idx + 1];
+                                    let bg_b = bg_raw[bg_idx + 2];
 
-                                let r = (px.r() as f32 * alpha + bg_r as f32 * (1.0 - alpha)) as u8;
-                                let g = (px.g() as f32 * alpha + bg_g as f32 * (1.0 - alpha)) as u8;
-                                let b = (px.b() as f32 * alpha + bg_b as f32 * (1.0 - alpha)) as u8;
-                                *px = Color32::from_rgba_premultiplied(r, g, b, px.a());
+                                    let r =
+                                        (px.r() as f32 * alpha + bg_r as f32 * (1.0 - alpha)) as u8;
+                                    let g =
+                                        (px.g() as f32 * alpha + bg_g as f32 * (1.0 - alpha)) as u8;
+                                    let b =
+                                        (px.b() as f32 * alpha + bg_b as f32 * (1.0 - alpha)) as u8;
+                                    *px = Color32::from_rgba_premultiplied(r, g, b, px.a());
+                                }
                             }
-                        }
-                    });
+                        });
                 }
             }
         }
@@ -528,11 +583,21 @@ mod tests {
         let height = 20;
 
         let mut office_pixels = vec![Color32::from_rgb(100, 100, 100); width * height];
-        processor.process_frame(&VirtualBackgroundMode::PresetOffice, &mut office_pixels, width, height);
+        processor.process_frame(
+            &VirtualBackgroundMode::PresetOffice,
+            &mut office_pixels,
+            width,
+            height,
+        );
         assert_eq!(office_pixels.len(), width * height);
 
         let mut studio_pixels = vec![Color32::from_rgb(100, 100, 100); width * height];
-        processor.process_frame(&VirtualBackgroundMode::PresetStudio, &mut studio_pixels, width, height);
+        processor.process_frame(
+            &VirtualBackgroundMode::PresetStudio,
+            &mut studio_pixels,
+            width,
+            height,
+        );
         assert_eq!(studio_pixels.len(), width * height);
     }
 }

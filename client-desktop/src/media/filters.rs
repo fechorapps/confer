@@ -30,14 +30,14 @@ impl VideoFilter {
 
     pub fn label(&self) -> &'static str {
         match self {
-            Self::None => "Normal",
-            Self::StudioGlow => "Studio Glow ✨",
-            Self::WarmSunset => "Warm Sunset 🌅",
-            Self::CoolNordic => "Nordic Cool ❄️",
-            Self::NoirBw => "Noir Cinema 🎬",
-            Self::VibrantPop => "Vibrant Pop 🎨",
-            Self::VignetteFocus => "Vignette Focus 🎯",
-            Self::VintageFilm => "Vintage Film 🎞️",
+            Self::None => "Natural",
+            Self::StudioGlow => "Studio Glow",
+            Self::WarmSunset => "Warm Sunset",
+            Self::CoolNordic => "Nordic Cool",
+            Self::NoirBw => "Noir Cinema",
+            Self::VibrantPop => "Vibrant Pop",
+            Self::VignetteFocus => "Vignette Focus",
+            Self::VintageFilm => "Vintage Film",
         }
     }
 
@@ -66,22 +66,25 @@ fn apply_studio_glow(pixels: &mut [Color32], width: usize, height: usize) {
     let cy = height as f32 / 2.0;
     let max_dist = (cx * cx + cy * cy).sqrt();
 
-    pixels.par_chunks_mut(width).enumerate().for_each(|(y, row)| {
-        let y_f = y as f32;
-        let dy = y_f - cy;
+    pixels
+        .par_chunks_mut(width)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let y_f = y as f32;
+            let dy = y_f - cy;
 
-        for (x, px) in row.iter_mut().enumerate() {
-            let dx = x as f32 - cx;
-            let dist = (dx * dx + dy * dy).sqrt() / max_dist;
-            let center_boost = (1.0 - dist).max(0.0) * 0.25;
+            for (x, px) in row.iter_mut().enumerate() {
+                let dx = x as f32 - cx;
+                let dist = (dx * dx + dy * dy).sqrt() / max_dist;
+                let center_boost = (1.0 - dist).max(0.0) * 0.25;
 
-            let r = (px.r() as f32 * (1.05 + center_boost) + 6.0).clamp(0.0, 255.0) as u8;
-            let g = (px.g() as f32 * (1.05 + center_boost) + 4.0).clamp(0.0, 255.0) as u8;
-            let b = (px.b() as f32 * (1.02 + center_boost) + 2.0).clamp(0.0, 255.0) as u8;
+                let r = (px.r() as f32 * (1.05 + center_boost) + 6.0).clamp(0.0, 255.0) as u8;
+                let g = (px.g() as f32 * (1.05 + center_boost) + 4.0).clamp(0.0, 255.0) as u8;
+                let b = (px.b() as f32 * (1.02 + center_boost) + 2.0).clamp(0.0, 255.0) as u8;
 
-            *px = Color32::from_rgb(r, g, b);
-        }
-    });
+                *px = Color32::from_rgb(r, g, b);
+            }
+        });
 }
 
 // 2. Warm Sunset: Golden skin tones & rich shadows (Multi-core parallel)
@@ -140,22 +143,25 @@ fn apply_vignette_focus(pixels: &mut [Color32], width: usize, height: usize) {
     let cy = height as f32 / 2.0;
     let max_dist = (cx * cx + cy * cy).sqrt();
 
-    pixels.par_chunks_mut(width).enumerate().for_each(|(y, row)| {
-        let y_f = y as f32;
-        let dy = y_f - cy;
+    pixels
+        .par_chunks_mut(width)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let y_f = y as f32;
+            let dy = y_f - cy;
 
-        for (x, px) in row.iter_mut().enumerate() {
-            let dx = x as f32 - cx;
-            let dist = (dx * dx + dy * dy).sqrt() / max_dist;
-            let factor = (1.0 - dist.powi(2) * 0.6).clamp(0.3, 1.0);
+            for (x, px) in row.iter_mut().enumerate() {
+                let dx = x as f32 - cx;
+                let dist = (dx * dx + dy * dy).sqrt() / max_dist;
+                let factor = (1.0 - dist.powi(2) * 0.6).clamp(0.3, 1.0);
 
-            let r = (px.r() as f32 * factor) as u8;
-            let g = (px.g() as f32 * factor) as u8;
-            let b = (px.b() as f32 * factor) as u8;
+                let r = (px.r() as f32 * factor) as u8;
+                let g = (px.g() as f32 * factor) as u8;
+                let b = (px.b() as f32 * factor) as u8;
 
-            *px = Color32::from_rgb(r, g, b);
-        }
-    });
+                *px = Color32::from_rgb(r, g, b);
+            }
+        });
 }
 
 // 7. Vintage Film: Sepia analog aesthetic (Multi-core parallel)
