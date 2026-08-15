@@ -12,6 +12,7 @@ public interface IConferDbContext
     DbSet<Session> Sessions { get; }
     DbSet<Participation> Participations { get; }
     DbSet<ChatMessage> ChatMessages { get; }
+    DbSet<CaptionChunk> CaptionChunks { get; }
     DbSet<User> Users { get; }
     DbSet<MeetingRecording> Recordings { get; }
     DbSet<Poll> Polls { get; }

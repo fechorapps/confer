@@ -8,6 +8,19 @@ using SIPSorcery.Net;
 
 namespace Confer.Infrastructure.Media;
 
+/// <summary>
+/// NOTE on horizontal scaling: unlike presence/chat/captions (backed by Redis — see
+/// RedisPresenceService and WebSocketSignalingHandler's relay), the actual SFU state below is
+/// in-process only. Every RTCPeerConnection, RTP forwarding decision, and the _rooms dictionary
+/// itself live in this instance's memory. If two participants of the same meeting land on
+/// different pods, each pod's SfuRoomManager only sees its own local participant and there is no
+/// media relay between them — real audio/video connectivity requires all of a meeting's
+/// participants to be routed to the same instance. Session.SfuNodeId / RoomTokenClaims.SfuNodeId
+/// and IPresenceService's node-affinity methods exist for exactly this purpose, but nothing
+/// currently enforces that affinity at the ingress/load-balancer level (SfuNodeId is always the
+/// hardcoded "sfu-local-1"), so a multi-replica deployment cannot yet guarantee SFU correctness
+/// without sticky routing built on top of that plumbing.
+/// </summary>
 public sealed class SfuRoomManager(
     ISignalingNotifier signalingNotifier,
     IIceServerProvider iceServerProvider,

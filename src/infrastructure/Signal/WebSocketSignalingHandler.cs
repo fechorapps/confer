@@ -18,29 +18,45 @@ using Confer.Infrastructure.AI;
 using Confer.Infrastructure.Observability;
 using Confer.Shared.Application.Interfaces;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using StackExchange.Redis;
 
 namespace Confer.Infrastructure.Signal;
 
 public sealed class WebSocketSignalingHandler : ISignalingNotifier
 {
+    // Cross-instance delivery: every Broadcast*/Send* method publishes here instead of writing
+    // directly to _roomSockets, and every instance (including the publisher) relays back out to
+    // whichever of its own local sockets match. Without Redis configured, delivery falls back to
+    // writing straight to _roomSockets, which is correct for a single instance and is exactly
+    // what this class did before horizontal scaling was wired in.
+    private const string RelayChannelName = "confer:ws:relay";
+
     private readonly ILogger<WebSocketSignalingHandler> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly IConferAiCompanionService _aiService;
+    private readonly IConnectionMultiplexer? _redis;
     private readonly ConcurrentDictionary<Guid, ConcurrentDictionary<Guid, WebSocket>> _roomSockets = new();
     private readonly ConcurrentDictionary<Guid, RoomTokenClaims> _socketClaims = new();
-    private readonly ConcurrentDictionary<Guid, List<ChatMessage>> _roomChatHistory = new();
-    private readonly ConcurrentDictionary<Guid, List<CaptionChunkDto>> _roomCaptionHistory = new();
 
     public WebSocketSignalingHandler(
         ILogger<WebSocketSignalingHandler> logger,
         IServiceProvider serviceProvider,
-        IConferAiCompanionService aiService)
+        IConferAiCompanionService aiService,
+        IConnectionMultiplexer? redis)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _aiService = aiService;
+        _redis = redis;
+
+        if (_redis is not null)
+        {
+            _redis.GetSubscriber().Subscribe(RedisChannel.Literal(RelayChannelName), (_, message) => HandleRelayMessage(message));
+            _logger.LogInformation("WebSocket signaling relay subscribed to Redis channel {Channel} for cross-instance delivery", RelayChannelName);
+        }
     }
 
     public async Task HandleWebSocketAsync(HttpContext context, WebSocket webSocket, string? token)
@@ -49,6 +65,7 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
         var tokenProvider = scope.ServiceProvider.GetRequiredService<ITokenProvider>();
         var presenceService = scope.ServiceProvider.GetRequiredService<IPresenceService>();
         var sfuManager = scope.ServiceProvider.GetRequiredService<ISfuRoomManager>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IConferDbContext>();
 
         if (string.IsNullOrWhiteSpace(token))
         {
@@ -66,6 +83,14 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
         var claims = validation.Value;
         var meetingId = claims.MeetingId;
         var participantId = claims.ParticipantId;
+
+        // Resolved once per connection so chat/caption persistence doesn't need a DB round-trip
+        // per message. Guid.Empty (no active session found) is handled defensively below by
+        // skipping persistence rather than failing the FK constraint on insert.
+        var sessionId = await dbContext.Sessions
+            .Where(s => s.MeetingId == meetingId && s.EndedAt == null)
+            .Select(s => s.Id)
+            .FirstOrDefaultAsync();
 
         var sockets = _roomSockets.GetOrAdd(meetingId, _ => new ConcurrentDictionary<Guid, WebSocket>());
         sockets[participantId] = webSocket;
@@ -118,7 +143,7 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
                 if (result.MessageType == WebSocketMessageType.Text)
                 {
                     var text = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                    await ProcessClientMessageAsync(claims, text, webSocket, sfuManager, presenceService);
+                    await ProcessClientMessageAsync(claims, sessionId, text, webSocket, sfuManager, presenceService);
                 }
             }
         }
@@ -147,6 +172,7 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
 
     private async Task ProcessClientMessageAsync(
         RoomTokenClaims claims,
+        Guid sessionId,
         string jsonText,
         WebSocket webSocket,
         ISfuRoomManager sfuManager,
@@ -218,22 +244,18 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
                         var now = DateTime.UtcNow;
                         await BroadcastChatAsync(claims.MeetingId, msgId, claims.ParticipantId, claims.DisplayName, body, now);
 
-                        // Record in room history
-                        var chatHistory = _roomChatHistory.GetOrAdd(claims.MeetingId, _ => new List<ChatMessage>());
-                        lock (chatHistory)
+                        if (sessionId != Guid.Empty)
                         {
-                            chatHistory.Add(ChatMessage.Create(claims.MeetingId, claims.ParticipantId, claims.DisplayName, body));
-                            if (chatHistory.Count > 100) chatHistory.RemoveAt(0);
+                            using var persistScope = _serviceProvider.CreateScope();
+                            var dbContext = persistScope.ServiceProvider.GetRequiredService<IConferDbContext>();
+                            dbContext.ChatMessages.Add(ChatMessage.Create(sessionId, claims.ParticipantId, claims.DisplayName, body));
+                            await dbContext.SaveChangesAsync();
                         }
 
                         // Check if message is addressed to Confer AI Copilot (@confer-ai or /ai)
                         if (_aiService.IsAiCommand(body))
                         {
-                            var captionHistory = _roomCaptionHistory.GetOrAdd(claims.MeetingId, _ => new List<CaptionChunkDto>());
-                            List<CaptionChunkDto> captionsSnapshot;
-                            List<ChatMessage> chatSnapshot;
-                            lock (captionHistory) { captionsSnapshot = captionHistory.ToList(); }
-                            lock (chatHistory) { chatSnapshot = chatHistory.ToList(); }
+                            var (chatSnapshot, captionsSnapshot) = await LoadAiContextAsync(sessionId);
 
                             var aiResponse = await _aiService.ProcessAiQueryAsync(
                                 claims.MeetingId,
@@ -291,10 +313,7 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
                             using var scope = _serviceProvider.CreateScope();
                             var dispatcher = scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
                             await dispatcher.SendAsync(new RejectParticipantCommand(claims.MeetingId, claims.UserId, targetId));
-                            if (_roomSockets.TryGetValue(claims.MeetingId, out var sockets) && sockets.TryGetValue(targetId, out var targetSocket))
-                            {
-                                await targetSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Rejected from waiting room", CancellationToken.None);
-                            }
+                            await CloseParticipantSocketAsync(claims.MeetingId, targetId, "Rejected from waiting room");
                         }
                     }
                     break;
@@ -342,10 +361,7 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
                             }
                             else if (action == "kick")
                             {
-                                if (_roomSockets.TryGetValue(claims.MeetingId, out var sockets) && sockets.TryGetValue(targetId, out var targetSocket))
-                                {
-                                    await targetSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Kicked by host", CancellationToken.None);
-                                }
+                                await CloseParticipantSocketAsync(claims.MeetingId, targetId, "Kicked by host");
                             }
                             else if (action == "admit")
                             {
@@ -358,10 +374,7 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
                                 using var scope = _serviceProvider.CreateScope();
                                 var dispatcher = scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
                                 await dispatcher.SendAsync(new RejectParticipantCommand(claims.MeetingId, claims.UserId, targetId));
-                                if (_roomSockets.TryGetValue(claims.MeetingId, out var sockets) && sockets.TryGetValue(targetId, out var targetSocket))
-                                {
-                                    await targetSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Rejected by host", CancellationToken.None);
-                                }
+                                await CloseParticipantSocketAsync(claims.MeetingId, targetId, "Rejected by host");
                             }
                         }
                         else if (action == "admit_all")
@@ -412,14 +425,12 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
                         );
                         await BroadcastCaptionAsync(claims.MeetingId, captionChunk);
 
-                        if (isFinal)
+                        if (isFinal && sessionId != Guid.Empty)
                         {
-                            var captionHistory = _roomCaptionHistory.GetOrAdd(claims.MeetingId, _ => new List<CaptionChunkDto>());
-                            lock (captionHistory)
-                            {
-                                captionHistory.Add(captionChunk);
-                                if (captionHistory.Count > 200) captionHistory.RemoveAt(0);
-                            }
+                            using var persistScope = _serviceProvider.CreateScope();
+                            var dbContext = persistScope.ServiceProvider.GetRequiredService<IConferDbContext>();
+                            dbContext.CaptionChunks.Add(CaptionChunk.Create(sessionId, claims.ParticipantId, claims.DisplayName, captionText, language));
+                            await dbContext.SaveChangesAsync();
                         }
                     }
                     break;
@@ -430,6 +441,31 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
         {
             _logger.LogError(ex, "Error processing client message");
         }
+    }
+
+    private async Task<(List<ChatMessage> Chat, List<CaptionChunkDto> Captions)> LoadAiContextAsync(Guid sessionId)
+    {
+        if (sessionId == Guid.Empty) return ([], []);
+
+        using var scope = _serviceProvider.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IConferDbContext>();
+
+        var chat = await dbContext.ChatMessages
+            .Where(c => c.SessionId == sessionId)
+            .OrderByDescending(c => c.SentAt)
+            .Take(100)
+            .OrderBy(c => c.SentAt)
+            .ToListAsync();
+
+        var captions = await dbContext.CaptionChunks
+            .Where(c => c.SessionId == sessionId)
+            .OrderByDescending(c => c.SpokenAt)
+            .Take(200)
+            .OrderBy(c => c.SpokenAt)
+            .Select(c => new CaptionChunkDto(c.ParticipantId, c.SpeakerName, c.Text, true, c.Language, new DateTimeOffset(c.SpokenAt).ToUnixTimeMilliseconds()))
+            .ToListAsync();
+
+        return (chat, captions);
     }
 
     public Task BroadcastJoinedAsync(Guid meetingId, ParticipantStateDto participant) =>
@@ -507,35 +543,27 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
 
     public Task SendSubscribeOfferAsync(Guid meetingId, Guid participantId, string sdpOffer, List<TrackMappingDto> mappings)
     {
-        if (_roomSockets.TryGetValue(meetingId, out var sockets) && sockets.TryGetValue(participantId, out var socket))
+        var msg = new JsonObject
         {
-            var msg = new JsonObject
-            {
-                ["type"] = "subscribe_offer",
-                ["sdp"] = sdpOffer,
-                ["mapping"] = JsonSerializer.SerializeToNode(mappings)
-            };
-            return SendJsonAsync(socket, msg);
-        }
-        return Task.CompletedTask;
+            ["type"] = "subscribe_offer",
+            ["sdp"] = sdpOffer,
+            ["mapping"] = JsonSerializer.SerializeToNode(mappings)
+        };
+        return DeliverAsync(meetingId, msg, targetParticipantId: participantId);
     }
 
     public Task SendIceCandidateAsync(Guid meetingId, Guid participantId, string target, IceCandidateDto candidate)
     {
-        if (_roomSockets.TryGetValue(meetingId, out var sockets) && sockets.TryGetValue(participantId, out var socket))
+        var msg = new JsonObject
         {
-            var msg = new JsonObject
-            {
-                ["type"] = "ice_candidate",
-                ["target"] = target,
-                ["candidate"] = candidate.Candidate,
-                ["sdp_mid"] = candidate.SdpMid,
-                ["sdp_mline_index"] = candidate.SdpMLineIndex,
-                ["username_fragment"] = candidate.UsernameFragment
-            };
-            return SendJsonAsync(socket, msg);
-        }
-        return Task.CompletedTask;
+            ["type"] = "ice_candidate",
+            ["target"] = target,
+            ["candidate"] = candidate.Candidate,
+            ["sdp_mid"] = candidate.SdpMid,
+            ["sdp_mline_index"] = candidate.SdpMLineIndex,
+            ["username_fragment"] = candidate.UsernameFragment
+        };
+        return DeliverAsync(meetingId, msg, targetParticipantId: participantId);
     }
 
     public Task BroadcastPollCreatedAsync(Guid meetingId, PollDto poll) =>
@@ -561,29 +589,17 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
 
     public Task BroadcastBreakoutInviteAsync(Guid meetingId, Guid participantId, BreakoutInviteDto invite)
     {
-        if (participantId == Guid.Empty)
+        var msg = new JsonObject
         {
-            return BroadcastToRoomAsync(meetingId, new JsonObject
-            {
-                ["type"] = "breakout_invite",
-                ["breakout_room_id"] = invite.BreakoutRoomId.ToString(),
-                ["room_name"] = invite.RoomName,
-                ["session_id"] = invite.SessionId.ToString()
-            });
-        }
+            ["type"] = "breakout_invite",
+            ["breakout_room_id"] = invite.BreakoutRoomId.ToString(),
+            ["room_name"] = invite.RoomName,
+            ["session_id"] = invite.SessionId.ToString()
+        };
 
-        if (_roomSockets.TryGetValue(meetingId, out var sockets) && sockets.TryGetValue(participantId, out var socket))
-        {
-            var msg = new JsonObject
-            {
-                ["type"] = "breakout_invite",
-                ["breakout_room_id"] = invite.BreakoutRoomId.ToString(),
-                ["room_name"] = invite.RoomName,
-                ["session_id"] = invite.SessionId.ToString()
-            };
-            return SendJsonAsync(socket, msg);
-        }
-        return Task.CompletedTask;
+        return participantId == Guid.Empty
+            ? DeliverAsync(meetingId, msg)
+            : DeliverAsync(meetingId, msg, targetParticipantId: participantId);
     }
 
     public Task BroadcastWaitingRoomUpdateAsync(Guid meetingId, bool isWaitingRoomEnabled, int waitingCount) =>
@@ -633,16 +649,118 @@ public sealed class WebSocketSignalingHandler : ISignalingNotifier
             ["caption"] = JsonSerializer.SerializeToNode(caption)
         });
 
-    private async Task BroadcastToRoomAsync(Guid meetingId, JsonObject json, Guid? excludeParticipantId = null)
+    private Task BroadcastToRoomAsync(Guid meetingId, JsonObject json, Guid? excludeParticipantId = null) =>
+        DeliverAsync(meetingId, json, excludeParticipantId: excludeParticipantId);
 
+    /// <summary>
+    /// Single entry point for every outbound signaling message. With Redis configured, this
+    /// always publishes to the shared relay channel rather than writing to _roomSockets
+    /// directly — the local subscription callback (HandleRelayMessage, wired up in the
+    /// constructor) is what actually delivers to this instance's own local sockets, same as it
+    /// does for every other instance. That keeps a single delivery path regardless of which
+    /// instance a message originates on or which instance holds the target's live connection.
+    /// Without Redis, it falls straight through to local delivery — correct for a single
+    /// instance and unchanged from before horizontal scaling was wired in.
+    /// </summary>
+    private async Task DeliverAsync(Guid meetingId, JsonObject payload, Guid? targetParticipantId = null, Guid? excludeParticipantId = null)
     {
-        if (_roomSockets.TryGetValue(meetingId, out var sockets))
+        if (_redis is { } redis)
         {
-            var tasks = sockets
-                .Where(kvp => !excludeParticipantId.HasValue || kvp.Key != excludeParticipantId.Value)
-                .Select(kvp => SendJsonAsync(kvp.Value, json));
+            var envelope = new JsonObject
+            {
+                ["meeting_id"] = meetingId.ToString(),
+                ["target_participant_id"] = targetParticipantId?.ToString(),
+                ["exclude_participant_id"] = excludeParticipantId?.ToString(),
+                ["payload"] = payload
+            };
+            await redis.GetSubscriber().PublishAsync(RedisChannel.Literal(RelayChannelName), envelope.ToJsonString());
+            return;
+        }
 
-            await Task.WhenAll(tasks);
+        await DeliverLocalAsync(meetingId, payload, targetParticipantId, excludeParticipantId);
+    }
+
+    private async Task DeliverLocalAsync(Guid meetingId, JsonObject payload, Guid? targetParticipantId, Guid? excludeParticipantId)
+    {
+        if (!_roomSockets.TryGetValue(meetingId, out var sockets)) return;
+
+        if (targetParticipantId.HasValue)
+        {
+            if (sockets.TryGetValue(targetParticipantId.Value, out var socket))
+            {
+                await SendJsonAsync(socket, payload);
+            }
+            return;
+        }
+
+        var tasks = sockets
+            .Where(kvp => !excludeParticipantId.HasValue || kvp.Key != excludeParticipantId.Value)
+            .Select(kvp => SendJsonAsync(kvp.Value, payload));
+
+        await Task.WhenAll(tasks);
+    }
+
+    /// <summary>
+    /// Closes a specific participant's socket, wherever it's actually connected. Routed through
+    /// the same Redis relay as message delivery since the target may be held by a different
+    /// instance under horizontal scaling — a purely local _roomSockets lookup would silently do
+    /// nothing if the target isn't on this instance.
+    /// </summary>
+    private async Task CloseParticipantSocketAsync(Guid meetingId, Guid participantId, string reason)
+    {
+        if (_redis is { } redis)
+        {
+            var envelope = new JsonObject
+            {
+                ["meeting_id"] = meetingId.ToString(),
+                ["target_participant_id"] = participantId.ToString(),
+                ["close_reason"] = reason
+            };
+            await redis.GetSubscriber().PublishAsync(RedisChannel.Literal(RelayChannelName), envelope.ToJsonString());
+            return;
+        }
+
+        await CloseLocalParticipantSocketAsync(meetingId, participantId, reason);
+    }
+
+    private async Task CloseLocalParticipantSocketAsync(Guid meetingId, Guid participantId, string reason)
+    {
+        if (_roomSockets.TryGetValue(meetingId, out var sockets) &&
+            sockets.TryGetValue(participantId, out var socket) &&
+            socket.State == WebSocketState.Open)
+        {
+            await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, reason, CancellationToken.None);
+        }
+    }
+
+    private void HandleRelayMessage(RedisValue message)
+    {
+        try
+        {
+            if (JsonNode.Parse(message.ToString()) is not JsonObject envelope) return;
+
+            var meetingId = Guid.Parse(envelope["meeting_id"]!.GetValue<string>());
+            var targetStr = envelope["target_participant_id"]?.GetValue<string>();
+            var targetId = string.IsNullOrEmpty(targetStr) ? (Guid?)null : Guid.Parse(targetStr);
+
+            if (envelope["close_reason"] is JsonValue closeReasonNode)
+            {
+                if (targetId.HasValue)
+                {
+                    _ = CloseLocalParticipantSocketAsync(meetingId, targetId.Value, closeReasonNode.GetValue<string>());
+                }
+                return;
+            }
+
+            var excludeStr = envelope["exclude_participant_id"]?.GetValue<string>();
+            var excludeId = string.IsNullOrEmpty(excludeStr) ? (Guid?)null : Guid.Parse(excludeStr);
+            var payload = envelope["payload"]!.AsObject();
+
+            _ = DeliverLocalAsync(meetingId, payload, targetId, excludeId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to process relayed signaling message");
         }
     }
 

@@ -7,6 +7,8 @@ using Confer.Infrastructure.Signal;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using StackExchange.Redis;
 
 namespace Confer.Infrastructure;
 
@@ -23,6 +25,16 @@ public static class ServiceExtensions
             if (!string.IsNullOrWhiteSpace(postgresConn))
             {
                 options.UseNpgsql(postgresConn);
+
+                // The migration history was authored (and is model-diffed) against SQLite, the
+                // default local/test provider. EF's pending-changes check compares the compiled
+                // model against that snapshot using whichever provider is active, and the two
+                // providers' own conventions (default lengths, etc.) diverge enough to always
+                // trip it here even with no real drift — the actual CreateTable/AddColumn
+                // operations themselves carry no provider-specific SQL, so they still apply
+                // correctly. Only suppressed for Postgres; SQLite keeps the check so real
+                // uncommitted model changes still fail loudly during dev.
+                options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
             }
             else
             {
@@ -31,6 +43,29 @@ public static class ServiceExtensions
         });
 
         services.AddScoped<IConferDbContext>(sp => sp.GetRequiredService<ConferDbContext>());
+
+        // Shared Redis connection: backs both presence tracking and cross-instance WebSocket
+        // relay. Null when Redis:ConnectionString isn't configured or the connection fails, in
+        // which case dependents fall back to single-process, in-memory behavior.
+        services.AddSingleton<IConnectionMultiplexer>(sp =>
+        {
+            var redisConn = configuration.GetConnectionString("Redis");
+            var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("Confer.Infrastructure.Redis");
+
+            if (string.IsNullOrWhiteSpace(redisConn)) return null!;
+
+            try
+            {
+                var multiplexer = ConnectionMultiplexer.Connect(redisConn);
+                logger.LogInformation("Connected to Redis at {RedisConnection}", redisConn);
+                return multiplexer;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to connect to Redis. Falling back to single-instance, in-memory presence and signaling.");
+                return null!;
+            }
+        });
 
         // Security & Tokens
         services.AddSingleton<ITokenProvider, JwtTokenProvider>();

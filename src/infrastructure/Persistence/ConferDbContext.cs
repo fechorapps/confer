@@ -15,6 +15,7 @@ public sealed class ConferDbContext(DbContextOptions<ConferDbContext> options)
     public DbSet<Session> Sessions => Set<Session>();
     public DbSet<Participation> Participations => Set<Participation>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<CaptionChunk> CaptionChunks => Set<CaptionChunk>();
     public DbSet<User> Users => Set<User>();
     public DbSet<MeetingRecording> Recordings => Set<MeetingRecording>();
     public DbSet<Poll> Polls => Set<Poll>();
@@ -140,6 +141,16 @@ public sealed class ConferDbContext(DbContextOptions<ConferDbContext> options)
             builder.Property(c => c.UserName).IsRequired().HasMaxLength(150);
             builder.Property(c => c.Body).IsRequired().HasMaxLength(2000);
             builder.HasIndex(c => new { c.SessionId, c.SentAt });
+        });
+
+        modelBuilder.Entity<CaptionChunk>(builder =>
+        {
+            builder.ToTable("caption_chunks");
+            builder.HasKey(c => c.Id);
+            builder.Property(c => c.SpeakerName).IsRequired().HasMaxLength(150);
+            builder.Property(c => c.Text).IsRequired().HasMaxLength(2000);
+            builder.Property(c => c.Language).IsRequired().HasMaxLength(16);
+            builder.HasIndex(c => new { c.SessionId, c.SpokenAt });
         });
 
         modelBuilder.Entity<Poll>(builder =>
