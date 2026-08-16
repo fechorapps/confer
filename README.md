@@ -27,7 +27,7 @@
 **Confer** is a modern, privacy-first, zero-delay video conferencing ecosystem engineered for low latency, zero Electron/Chromium desktop overhead, and infinite cloud scalability.
 
 Built across three native surfaces:
-- **🖥️ Native Desktop Client (`Rust` + `egui` + `cpal` + `RNNoise`)**: Pure GPU immediate mode client running on OpenGL/Vulkan with **< 40 MB RAM** memory footprint (compared to Zoom's 350+ MB and Teams' 800+ MB).
+- **🖥️ Native Desktop Client (`Rust` + `egui` + `WebRTC` + `RNNoise`)**: Pure GPU immediate mode client running on OpenGL/Vulkan with **< 40 MB RAM** memory footprint (compared to Zoom's 350+ MB and Teams' 800+ MB). Publishes and decodes real Opus audio and VP8 video end to end; building it requires system libraries (`opus-devel`, `libvpx-devel`, `alsa-lib-devel` on Fedora).
 - **☁️ Backend Server (`.NET 10` + Clean Architecture + CQRS + SIPSorcery SFU)**: High-throughput media routing, WebSocket signaling (`confer.v1`), PostgreSQL/SQLite persistence, and Redis presence.
 - **📱 Mobile App (`Kotlin` + `Jetpack Compose` + `Ktor 3.x`)**: Responsive Android client with custom Confer dark design system.
 - **🌐 Web Client (`HTML5` + `Vanilla ES6` + `WebRTC`)**: Zero-install browser interface with Web Speech STT and hardware acceleration.
@@ -117,7 +117,7 @@ Confer/
 │   ├── infrastructure/       # SFU WebRTC Engine, SFrame, AI Copilot, Webhooks, Telephony
 │   ├── api/                  # Minimal APIs, WebSocket /v1/signal, and Static Web Client
 │   └── shared/               # Functional Result<T>, Error models, and CQRS interfaces
-├── client-desktop/           # Native Rust Immediate Mode Desktop App (egui, cpal, SFrame)
+├── client-desktop/           # Native Rust Immediate Mode Desktop App (egui, WebRTC, Opus/VP8, RNNoise)
 ├── mobile/                   # Native Kotlin / Jetpack Compose Android Application
 ├── deploy/
 │   ├── helm/confer/          # Production Kubernetes Helm Chart (API, HPA, Ingress, Coturn)

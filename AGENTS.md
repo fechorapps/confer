@@ -20,14 +20,18 @@ Confer is structured across three primary surfaces:
 
 ### 2. Native Rust Desktop Client (`client-desktop/`)
 - **GPU Immediate Mode GUI**: Built with **`egui` / `eframe`** (< 40 MB RAM footprint on Linux, zero Electron/Chromium overhead).
-- **Native Audio**: Powered by **`cpal`** (PulseAudio/ALSA/PipeWire) with Opus audio streaming.
 - **Real-time Protocol**: Async WebSocket client communicating via `confer.v1` protocol.
+- **WebRTC Engine**: `webrtc-rs` / `rtc` peer-connection engine for the SFU (publish/subscribe + trickle ICE).
+- **Audio Pipeline**: `cpal` mic capture → Opus encode → publish track; remote Opus tracks decoded and mixed to playback.
+- **Video Pipeline**: `nokhwa` camera capture + `ashpd`/`pipewire` screen share → I420 → VP8 encode (libvpx via a minimal C wrapper, `media/vpx_ffi/`) → publish track. Remote VP8 tracks are depacketized (RFC 7741), decoded, and rendered as `egui` textures in the meeting grid.
 - **UI Views**:
   - **Lobby View**: Server selector, user accounts, audio input meter, meeting creator / join code.
   - **Meeting Room View**: Auto-fitting responsive video grid, active speaker highlighting, screen share view.
   - **Bottom Dock**: Mic, camera, screen share, hand raise, emoji reactions, chat toggle, roster toggle, diagnostics HUD toggle, leave call.
   - **Side Panels**: Live in-call chat and participant roster with host moderation (Mute, Kick, Lock).
-  - **Diagnostics HUD**: Latency RTT, packet loss %, FPS, memory footprint in MB.
+  - **Diagnostics HUD**: Latency RTT (real, from ping/pong round-trip), packet loss %, FPS, memory footprint in MB.
+
+> **Build note (current state):** the desktop client compiles, passes `cargo test`/`cargo clippy`, and publishes/decodes real audio (Opus) and video (VP8) end to end. Building it requires the system development libraries: on Fedora `sudo dnf install -y opus-devel libvpx-devel alsa-lib-devel` (or `libopus-dev libvpx-dev libasound2-dev` on Debian/Ubuntu), plus `cmake` and a C compiler for the libvpx wrapper. Known gaps: the VP8 RTP payload type is hard-coded to the common default (96) instead of negotiated from the SDP answer, and there's no PLI-triggered keyframe request, so a participant joining mid-call waits up to ~2s for the next automatic keyframe.
 
 ### 3. Native Kotlin Mobile App (`mobile/`)
 - **UI Toolkit**: **Jetpack Compose + Material 3** with custom Confer dark design system.
