@@ -92,6 +92,12 @@ impl Theme {
             .fill(Self::SURFACE_DOCK)
             .stroke(Stroke::new(1.0_f32, Self::SURFACE_3))
             .rounding(Self::RADIUS_PILL)
+            .shadow(egui::epaint::Shadow {
+                offset: [0.0, 4.0].into(),
+                blur: 16.0,
+                spread: 0.0,
+                color: Color32::from_rgba_premultiplied(0, 0, 0, 140),
+            })
             .inner_margin(egui::Margin::symmetric(16.0, 7.0))
     }
 }

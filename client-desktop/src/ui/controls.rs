@@ -1,6 +1,6 @@
 use crate::app::ConferApp;
 use crate::ui::theme::Theme;
-use egui::{Color32, RichText, Stroke, Ui};
+use egui::{Color32, Pos2, RichText, Stroke, Ui, Vec2};
 
 pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
     let is_host = app.my_role == "host";
@@ -52,10 +52,11 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                 };
 
                 if ui
-                    .add(
+                    .add_sized(
+                        Vec2::new(0.0, 32.0),
                         egui::Button::new(
                             RichText::new(mic_text)
-                                .size(12.0)
+                                .size(11.5)
                                 .strong()
                                 .color(mic_text_col),
                         )
@@ -86,10 +87,11 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                 };
 
                 if ui
-                    .add(
+                    .add_sized(
+                        Vec2::new(0.0, 32.0),
                         egui::Button::new(
                             RichText::new(cam_text)
-                                .size(12.0)
+                                .size(11.5)
                                 .strong()
                                 .color(cam_text_col),
                         )
@@ -105,10 +107,11 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                 // Screen Share Control
                 if app.is_screen_sharing {
                     if ui
-                        .add(
+                        .add_sized(
+                            Vec2::new(0.0, 32.0),
                             egui::Button::new(
                                 RichText::new("⏹ Stop Share")
-                                    .size(12.0)
+                                    .size(11.5)
                                     .strong()
                                     .color(Color32::WHITE),
                             )
@@ -122,10 +125,11 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                     }
                 } else if app.screen_capturer.picker_mode() == crate::media::PickerMode::Native {
                     if ui
-                        .add(
+                        .add_sized(
+                            Vec2::new(0.0, 32.0),
                             egui::Button::new(
                                 RichText::new("🖥 Share")
-                                    .size(12.0)
+                                    .size(11.5)
                                     .strong()
                                     .color(Color32::WHITE),
                             )
@@ -140,7 +144,7 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                 } else {
                     let mut selected_display: Option<usize> = None;
                     ui.menu_button(
-                        RichText::new("🖥 Share").size(12.0).strong().color(Color32::WHITE),
+                        RichText::new("🖥 Share").size(11.5).strong().color(Color32::WHITE),
                         |ui| {
                             ui.set_min_width(220.0);
                             ui.label(
@@ -168,11 +172,12 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                     }
                 }
 
-                // Cluster Divider 1
+                // Precision Bounded Divider 1
                 ui.add_space(4.0);
-                ui.painter().vline(
-                    ui.cursor().min.x,
-                    ui.available_rect_before_wrap().y_range(),
+                let div1_x = ui.cursor().min.x;
+                let div1_cy = ui.available_rect_before_wrap().center().y;
+                ui.painter().line_segment(
+                    [Pos2::new(div1_x, div1_cy - 9.0), Pos2::new(div1_x, div1_cy + 9.0)],
                     Stroke::new(1.0_f32, Theme::BORDER_SUBTLE),
                 );
                 ui.add_space(4.0);
@@ -187,10 +192,11 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                 };
                 let hand_text = if app.is_hand_raised { "✋ Lower" } else { "✋ Hand" };
                 if ui
-                    .add(
+                    .add_sized(
+                        Vec2::new(0.0, 32.0),
                         egui::Button::new(
                             RichText::new(hand_text)
-                                .size(12.0)
+                                .size(11.5)
                                 .strong()
                                 .color(Color32::WHITE),
                         )
@@ -203,15 +209,15 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                     app.toggle_hand_raise();
                 }
 
-                // Emoji Reactions Popover
+                // Emoji Reactions Popover (8 High-Fidelity Reactions)
                 ui.menu_button(
-                    RichText::new("✨ React").size(12.0).strong().color(Color32::WHITE),
+                    RichText::new("✨ React").size(11.5).strong().color(Color32::WHITE),
                     |ui| {
                         ui.horizontal(|ui| {
-                            for emoji in ["👍", "❤️", "👏", "🎉", "🚀", "💡", "🔥"] {
+                            for emoji in ["👍", "❤️", "👏", "🎉", "🚀", "💡", "🔥", "💯"] {
                                 if ui
                                     .add(
-                                        egui::Button::new(RichText::new(emoji).size(18.0))
+                                        egui::Button::new(RichText::new(emoji).size(17.0))
                                             .fill(Theme::SURFACE_2)
                                             .rounding(Theme::RADIUS_SM),
                                     )
@@ -233,10 +239,11 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                         Theme::SURFACE_2
                     };
                     if ui
-                        .add(
+                        .add_sized(
+                            Vec2::new(0.0, 32.0),
                             egui::Button::new(
                                 RichText::new("🖌 Board")
-                                    .size(12.0)
+                                    .size(11.5)
                                     .strong()
                                     .color(Color32::WHITE),
                             )
@@ -255,10 +262,11 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                         Theme::SURFACE_2
                     };
                     if ui
-                        .add(
+                        .add_sized(
+                            Vec2::new(0.0, 32.0),
                             egui::Button::new(
                                 RichText::new("📊 Polls")
-                                    .size(12.0)
+                                    .size(11.5)
                                     .strong()
                                     .color(Color32::WHITE),
                             )
@@ -278,10 +286,11 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                     };
                     let cc_text = if app.is_captions_enabled { "💬 CC On" } else { "💬 CC" };
                     if ui
-                        .add(
+                        .add_sized(
+                            Vec2::new(0.0, 32.0),
                             egui::Button::new(
                                 RichText::new(cc_text)
-                                    .size(12.0)
+                                    .size(11.5)
                                     .strong()
                                     .color(Color32::WHITE),
                             )
@@ -297,42 +306,42 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                     // Compact Apps Menu
                     let has_active_app = app.is_whiteboard_active || app.show_polls || app.is_captions_enabled;
                     let apps_text = if has_active_app {
-                        RichText::new("⋯ Apps (On) ▾").size(12.0).strong().color(Theme::PRIMARY_LIGHT)
+                        RichText::new("⋯ Apps (On) ▾").size(11.5).strong().color(Theme::PRIMARY_LIGHT)
                     } else {
-                        RichText::new("⋯ Apps ▾").size(12.0).strong().color(Color32::WHITE)
+                        RichText::new("⋯ Apps ▾").size(11.5).strong().color(Color32::WHITE)
                     };
 
                     ui.menu_button(apps_text, |ui| {
-                            ui.set_min_width(200.0);
-                            ui.label(RichText::new("Collaboration Tools").size(11.0).strong().color(Theme::PRIMARY_LIGHT));
-                            ui.separator();
+                        ui.set_min_width(200.0);
+                        ui.label(RichText::new("Collaboration Tools").size(11.0).strong().color(Theme::PRIMARY_LIGHT));
+                        ui.separator();
 
-                            let wb_label = if app.is_whiteboard_active { "✓ 🖌 Whiteboard (Active)" } else { "   🖌 Whiteboard" };
-                            if ui.selectable_label(app.is_whiteboard_active, wb_label).clicked() {
-                                app.toggle_whiteboard();
-                                ui.close_menu();
-                            }
+                        let wb_label = if app.is_whiteboard_active { "✓ 🖌 Whiteboard (Active)" } else { "   🖌 Whiteboard" };
+                        if ui.selectable_label(app.is_whiteboard_active, wb_label).clicked() {
+                            app.toggle_whiteboard();
+                            ui.close_menu();
+                        }
 
-                            let polls_label = if app.show_polls { "✓ 📊 Live Polls (Active)" } else { "   📊 Live Polls" };
-                            if ui.selectable_label(app.show_polls, polls_label).clicked() {
-                                app.toggle_polls();
-                                ui.close_menu();
-                            }
+                        let polls_label = if app.show_polls { "✓ 📊 Live Polls (Active)" } else { "   📊 Live Polls" };
+                        if ui.selectable_label(app.show_polls, polls_label).clicked() {
+                            app.toggle_polls();
+                            ui.close_menu();
+                        }
 
-                            let cc_label = if app.is_captions_enabled { "✓ 💬 Closed Captions (On)" } else { "   💬 Closed Captions" };
-                            if ui.selectable_label(app.is_captions_enabled, cc_label).clicked() {
-                                app.toggle_captions();
-                                ui.close_menu();
-                            }
-                        },
-                    );
+                        let cc_label = if app.is_captions_enabled { "✓ 💬 Closed Captions (On)" } else { "   💬 Closed Captions" };
+                        if ui.selectable_label(app.is_captions_enabled, cc_label).clicked() {
+                            app.toggle_captions();
+                            ui.close_menu();
+                        }
+                    });
                 }
 
-                // Cluster Divider 2
+                // Precision Bounded Divider 2
                 ui.add_space(4.0);
-                ui.painter().vline(
-                    ui.cursor().min.x,
-                    ui.available_rect_before_wrap().y_range(),
+                let div2_x = ui.cursor().min.x;
+                let div2_cy = ui.available_rect_before_wrap().center().y;
+                ui.painter().line_segment(
+                    [Pos2::new(div2_x, div2_cy - 9.0), Pos2::new(div2_x, div2_cy + 9.0)],
                     Stroke::new(1.0_f32, Theme::BORDER_SUBTLE),
                 );
                 ui.add_space(4.0);
@@ -351,10 +360,11 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                     Theme::SURFACE_2
                 };
                 if ui
-                    .add(
+                    .add_sized(
+                        Vec2::new(0.0, 32.0),
                         egui::Button::new(
                             RichText::new(chat_btn_text)
-                                .size(12.0)
+                                .size(11.5)
                                 .strong()
                                 .color(Color32::WHITE),
                         )
@@ -387,10 +397,11 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                     Theme::SURFACE_2
                 };
                 if ui
-                    .add(
+                    .add_sized(
+                        Vec2::new(0.0, 32.0),
                         egui::Button::new(
                             RichText::new(roster_text)
-                                .size(12.0)
+                                .size(11.5)
                                 .strong()
                                 .color(Color32::WHITE),
                         )
@@ -409,7 +420,7 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
 
                 // Studio FX & Video Tone Settings Menu (⚙)
                 ui.menu_button(
-                    RichText::new("⚙ Studio FX").size(12.0).strong().color(Color32::WHITE),
+                    RichText::new("⚙ Studio FX").size(11.5).strong().color(Color32::WHITE),
                     |ui| {
                         ui.set_min_width(240.0);
 
@@ -467,7 +478,7 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                 // Host Security Policy Menu (Visible to Host)
                 if is_host {
                     ui.menu_button(
-                        RichText::new("🛡 Security").size(12.0).strong().color(Theme::PRIMARY_LIGHT),
+                        RichText::new("🛡 Security").size(11.5).strong().color(Theme::PRIMARY_LIGHT),
                         |ui| {
                             ui.set_min_width(220.0);
                             ui.label(RichText::new("Host Governance & DLP").size(11.0).strong().color(Theme::AMBER));
@@ -530,11 +541,12 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                     );
                 }
 
-                // Cluster Divider 3
+                // Precision Bounded Divider 3
                 ui.add_space(4.0);
-                ui.painter().vline(
-                    ui.cursor().min.x,
-                    ui.available_rect_before_wrap().y_range(),
+                let div3_x = ui.cursor().min.x;
+                let div3_cy = ui.available_rect_before_wrap().center().y;
+                ui.painter().line_segment(
+                    [Pos2::new(div3_x, div3_cy - 9.0), Pos2::new(div3_x, div3_cy + 9.0)],
                     Stroke::new(1.0_f32, Theme::BORDER_SUBTLE),
                 );
                 ui.add_space(4.0);
@@ -543,10 +555,11 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                 // CLUSTER 4: HIGH-STAKES LEAVE ACTION (CONFIRMATION GUARD)
                 // =========================================================
                 if ui
-                    .add(
+                    .add_sized(
+                        Vec2::new(0.0, 32.0),
                         egui::Button::new(
                             RichText::new("✕ Leave")
-                                .size(12.0)
+                                .size(11.5)
                                 .strong()
                                 .color(Color32::WHITE),
                         )
