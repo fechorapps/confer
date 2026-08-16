@@ -1,5 +1,7 @@
 use egui::{Color32, FontId, Pos2, Rect, Ui};
 
+use crate::ui::theme::Theme;
+
 /// Renders a semi-transparent diagonally tiled watermark pattern displaying the
 /// viewer's display name and email address across the given bounding rectangle.
 pub fn render_watermark(ui: &mut Ui, rect: Rect, viewer_name: &str, viewer_email: &str) {
@@ -18,7 +20,7 @@ pub fn render_watermark(ui: &mut Ui, rect: Rect, viewer_name: &str, viewer_email
     }
 
     // Low-opacity subtle white/zinc watermark color (anti-leak / DLP compliance)
-    let watermark_color = Color32::from_rgba_premultiplied(248, 250, 252, 32);
+    let watermark_color = Color32::from_rgba_premultiplied(Theme::TEXT_PRIMARY.r(), Theme::TEXT_PRIMARY.g(), Theme::TEXT_PRIMARY.b(), 32);
     let font_id = FontId::proportional(13.0);
 
     let step_x = 240.0;
