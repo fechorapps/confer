@@ -6,7 +6,7 @@ use crate::ui::theme::Theme;
 
 pub fn render_polls(app: &mut ConferApp, ui: &mut Ui) {
     egui::Frame::group(ui.style())
-        .fill(Color32::from_rgb(18, 20, 23))
+        .fill(Theme::SURFACE_1)
         .stroke(Stroke::new(1.0_f32, Theme::BORDER_SUBTLE))
         .rounding(8.0)
         .inner_margin(12.0)
@@ -55,7 +55,7 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                     RichText::new("+ Create New Poll")
                         .size(12.0)
                         .strong()
-                        .color(Color32::WHITE),
+                        .color(Theme::ON_ACCENT),
                 )
                 .fill(Theme::BORDER_ACTIVE)
                 .rounding(6.0),
@@ -265,7 +265,11 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                                 RichText::new("Submit Vote")
                                     .size(11.0)
                                     .strong()
-                                    .color(Color32::WHITE),
+                                    .color(if can_submit {
+                                        Theme::ON_ACCENT
+                                    } else {
+                                        Color32::WHITE
+                                    }),
                             )
                             .fill(if can_submit {
                                 Theme::BORDER_ACTIVE
@@ -529,7 +533,11 @@ fn render_poll_creation_form(app: &mut ConferApp, ui: &mut Ui) {
                     RichText::new("🚀 Launch Poll")
                         .size(12.0)
                         .strong()
-                        .color(Color32::WHITE),
+                        .color(if can_launch {
+                            Theme::ON_ACCENT
+                        } else {
+                            Color32::WHITE
+                        }),
                 )
                 .fill(if can_launch {
                     Theme::BORDER_ACTIVE

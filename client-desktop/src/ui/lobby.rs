@@ -47,7 +47,7 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
                         .rounding(Theme::RADIUS_MD)
                         .inner_margin(egui::Margin::symmetric(8.0, 4.0))
                         .show(ui, |ui| {
-                            ui.label(RichText::new("⚡").size(14.0).color(Color32::WHITE));
+                            ui.label(RichText::new("⚡").size(14.0).color(Theme::ON_ACCENT));
                         });
                     ui.add_space(8.0);
                     ui.label(
@@ -370,7 +370,7 @@ fn render_studio_viewfinder_card(
                         RichText::new(cam_text)
                             .size(11.5)
                             .strong()
-                            .color(Color32::WHITE),
+                            .color(Theme::ON_ACCENT),
                     )
                     .fill(cam_bg)
                     .rounding(Theme::RADIUS_SM),
@@ -399,7 +399,7 @@ fn render_studio_viewfinder_card(
                         RichText::new(mic_text)
                             .size(11.5)
                             .strong()
-                            .color(Color32::WHITE),
+                            .color(Theme::ON_ACCENT),
                     )
                     .fill(mic_bg)
                     .rounding(Theme::RADIUS_SM),
@@ -421,6 +421,11 @@ fn render_studio_viewfinder_card(
             } else {
                 "⚡ Denoise OFF"
             };
+            let denoise_fg = if app.is_ai_denoise_enabled {
+                Theme::ON_ACCENT
+            } else {
+                Color32::WHITE
+            };
             if ui
                 .add_sized(
                     Vec2::new(btn_w, 34.0),
@@ -428,7 +433,7 @@ fn render_studio_viewfinder_card(
                         RichText::new(denoise_text)
                             .size(11.5)
                             .strong()
-                            .color(Color32::WHITE),
+                            .color(denoise_fg),
                     )
                     .fill(denoise_bg)
                     .rounding(Theme::RADIUS_SM),
@@ -503,7 +508,7 @@ fn render_studio_viewfinder_card(
                     (Theme::TEXT_SECONDARY, Theme::SURFACE_2)
                 };
                 let text_color = if is_active {
-                    Color32::WHITE
+                    Theme::ON_ACCENT
                 } else {
                     Color32::from_rgb(203, 213, 225)
                 };
@@ -562,7 +567,7 @@ fn render_studio_viewfinder_card(
                     Theme::SURFACE_2
                 };
                 let text_color = if is_active {
-                    Color32::WHITE
+                    Theme::ON_ACCENT
                 } else {
                     Color32::from_rgb(203, 213, 225)
                 };
@@ -589,13 +594,18 @@ fn render_studio_viewfinder_card(
             } else {
                 Theme::SURFACE_2
             };
+            let custom_text_color = if is_custom {
+                Theme::ON_ACCENT
+            } else {
+                Color32::WHITE
+            };
             if ui
                 .add(
                     egui::Button::new(
                         RichText::new("📁 Custom Photo...")
                             .size(11.0)
                             .strong()
-                            .color(Color32::WHITE),
+                            .color(custom_text_color),
                     )
                     .fill(custom_bg)
                     .rounding(Theme::RADIUS_PILL),
@@ -650,7 +660,7 @@ fn render_meeting_cockpit_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
                     Vec2::new(chip_w, 32.0),
                     egui::Button::new(RichText::new("★ Host (Dev)").size(11.0).strong().color(
                         if is_host {
-                            Color32::WHITE
+                            Theme::ON_ACCENT
                         } else {
                             Theme::AMBER_LIGHT
                         },
@@ -752,7 +762,7 @@ fn render_meeting_cockpit_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
                 Theme::SURFACE_2
             };
             let host_tab_color = if is_host_tab {
-                Color32::WHITE
+                Theme::ON_ACCENT
             } else {
                 Theme::TEXT_SECONDARY
             };
@@ -781,7 +791,7 @@ fn render_meeting_cockpit_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
                 Theme::SURFACE_2
             };
             let join_tab_color = if is_join_tab {
-                Color32::WHITE
+                Theme::ON_ACCENT
             } else {
                 Theme::TEXT_SECONDARY
             };

@@ -53,7 +53,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
     ui.vertical(|ui| {
         // --- Whiteboard Header / Toolbar ---
         egui::Frame::group(ui.style())
-            .fill(Color32::from_rgb(18, 20, 23))
+            .fill(Theme::SURFACE_1)
             .stroke(Stroke::new(1.0_f32, Theme::BORDER_SUBTLE))
             .rounding(8.0)
             .inner_margin(egui::Margin::symmetric(12.0, 8.0))
@@ -78,11 +78,16 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                         } else {
                             Theme::SURFACE_2
                         };
+                        let fg = if is_active {
+                            Theme::ON_ACCENT
+                        } else {
+                            Color32::WHITE
+                        };
 
                         if ui
                             .add(
                                 egui::Button::new(
-                                    RichText::new(tool.label()).size(11.0).color(Color32::WHITE),
+                                    RichText::new(tool.label()).size(11.0).color(fg),
                                 )
                                 .fill(bg)
                                 .rounding(6.0),
@@ -211,7 +216,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                         if ui
                             .add(
                                 egui::Button::new(
-                                    RichText::new("🗑 Clear").size(11.0).color(Color32::WHITE),
+                                    RichText::new("🗑 Clear").size(11.0).color(Theme::ON_ACCENT),
                                 )
                                 .fill(crate::ui::theme::Theme::CRIMSON)
                                 .rounding(crate::ui::theme::Theme::RADIUS_SM),
@@ -235,7 +240,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                                         RichText::new("Yes, Clear")
                                             .size(10.5)
                                             .strong()
-                                            .color(Color32::WHITE),
+                                            .color(Theme::ON_ACCENT),
                                     )
                                     .fill(crate::ui::theme::Theme::CRIMSON)
                                     .rounding(crate::ui::theme::Theme::RADIUS_SM),
@@ -299,7 +304,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                         if (ui
                             .add(
                                 egui::Button::new(
-                                    RichText::new("Place Text").size(11.0).color(Color32::WHITE),
+                                    RichText::new("Place Text").size(11.0).color(Theme::ON_ACCENT),
                                 )
                                 .fill(Theme::BORDER_ACTIVE)
                                 .rounding(4.0),

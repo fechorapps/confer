@@ -42,6 +42,12 @@ impl Theme {
     pub const AMBER: Color32 = catppuccin_egui::MOCHA.peach; // #FAB387
     pub const AMBER_LIGHT: Color32 = catppuccin_egui::MOCHA.yellow; // #F9E2AF
 
+    /// Foreground color for text/icons drawn on top of an accent fill
+    /// (EMERALD/PRIMARY/BORDER_ACTIVE/CRIMSON). Catppuccin's accents are
+    /// pastel, so a plain white foreground reads as ~1.5-2.3:1 contrast;
+    /// dark-on-accent (this token) gives 8-12:1.
+    pub const ON_ACCENT: Color32 = catppuccin_egui::MOCHA.crust;
+
     // -------------------------------------------------------------------------
     // Typography Colors
     // -------------------------------------------------------------------------

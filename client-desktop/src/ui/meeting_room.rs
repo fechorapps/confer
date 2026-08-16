@@ -29,7 +29,7 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                         .rounding(6.0)
                         .inner_margin(egui::Margin::symmetric(6.0, 3.0))
                         .show(ui, |ui| {
-                            ui.label(RichText::new("⚡").size(12.0).color(Color32::WHITE));
+                            ui.label(RichText::new("⚡").size(12.0).color(Theme::ON_ACCENT));
                         });
                     ui.add_space(4.0);
                     ui.label(
@@ -112,13 +112,18 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                     } else {
                         crate::ui::theme::Theme::SURFACE_2
                     };
+                    let hud_fg = if app.show_diagnostics {
+                        Theme::ON_ACCENT
+                    } else {
+                        Color32::WHITE
+                    };
                     if ui
                         .add(
                             egui::Button::new(
                                 RichText::new("⚡ HUD")
                                     .size(11.0)
                                     .strong()
-                                    .color(Color32::WHITE),
+                                    .color(hud_fg),
                             )
                             .fill(hud_bg)
                             .rounding(crate::ui::theme::Theme::RADIUS_SM),
@@ -242,7 +247,7 @@ fn render_push_to_talk_indicator(app: &ConferApp, ui: &mut Ui, full_rect: Rect) 
         egui::Align2::CENTER_CENTER,
         "🎙 TRANSMITTING (Push-to-Talk: Spacebar)",
         egui::FontId::proportional(12.5),
-        Color32::WHITE,
+        Theme::ON_ACCENT,
     );
 }
 
@@ -312,7 +317,7 @@ fn render_safety_modals(app: &mut ConferApp, ui: &mut Ui, full_rect: Rect) {
                                         RichText::new("Leave Call (Enter)")
                                             .size(12.5)
                                             .strong()
-                                            .color(Color32::WHITE),
+                                            .color(Theme::ON_ACCENT),
                                     )
                                     .fill(Theme::CRIMSON)
                                     .rounding(8.0),
@@ -394,7 +399,7 @@ fn render_safety_modals(app: &mut ConferApp, ui: &mut Ui, full_rect: Rect) {
                                         RichText::new("Remove (Enter)")
                                             .size(12.5)
                                             .strong()
-                                            .color(Color32::WHITE),
+                                            .color(Theme::ON_ACCENT),
                                     )
                                     .fill(Theme::CRIMSON)
                                     .rounding(8.0),
@@ -486,7 +491,7 @@ fn render_screen_share_stage(app: &mut ConferApp, ui: &mut Ui) {
                                         RichText::new("⏹ Stop Share")
                                             .size(11.5)
                                             .strong()
-                                            .color(Color32::WHITE),
+                                            .color(Theme::ON_ACCENT),
                                     )
                                     .fill(Theme::CRIMSON)
                                     .rounding(Theme::RADIUS_SM),

@@ -1335,7 +1335,6 @@ impl eframe::App for ConferApp {
         let mut visuals = ctx.style().visuals.clone();
         visuals.panel_fill = Theme::CANVAS;
         visuals.window_fill = Theme::SURFACE_1;
-        visuals.selection.bg_fill = Theme::BORDER_ACTIVE;
         ctx.set_visuals(visuals);
 
         self.poll_connect_result();
