@@ -950,10 +950,6 @@ impl ConferApp {
     }
 
     pub fn handle_global_shortcuts(&mut self, ctx: &egui::Context) {
-        if self.is_waiting_in_lobby {
-            return;
-        }
-
         // If a text input has active focus, do not intercept typing
         if ctx.wants_keyboard_input() {
             return;
@@ -961,6 +957,22 @@ impl ConferApp {
 
         let input = ctx.input(|i| i.clone());
         let ctrl_or_cmd = input.modifiers.command || input.modifiers.ctrl;
+
+        // Waiting Lobby shortcuts (Mic/Cam test and Escape dismiss)
+        if self.is_waiting_in_lobby {
+            if input.key_pressed(egui::Key::Escape) {
+                self.show_leave_confirmation = false;
+            }
+            if ctrl_or_cmd {
+                if input.key_pressed(egui::Key::D) {
+                    self.toggle_mic();
+                }
+                if input.key_pressed(egui::Key::E) {
+                    self.toggle_camera();
+                }
+            }
+            return;
+        }
 
         // Pre-Flight Lobby Shortcuts
         if self.view_state == ViewState::Lobby {
