@@ -3,6 +3,7 @@ use uuid::Uuid;
 
 use crate::app::ConferApp;
 use crate::sdk::protocol::{WhiteboardColorDto, WhiteboardShapeDto, WhiteboardStrokeDto};
+use crate::ui::theme::Theme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WhiteboardTool {
@@ -53,7 +54,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
         // --- Whiteboard Header / Toolbar ---
         egui::Frame::group(ui.style())
             .fill(Color32::from_rgb(18, 20, 23))
-            .stroke(Stroke::new(1.0_f32, Color32::from_rgb(34, 38, 44)))
+            .stroke(Stroke::new(1.0_f32, Theme::BORDER_SUBTLE))
             .rounding(8.0)
             .inner_margin(egui::Margin::symmetric(12.0, 8.0))
             .show(ui, |ui| {
@@ -64,7 +65,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                         RichText::new("🎨 Whiteboard")
                             .size(13.0)
                             .strong()
-                            .color(Color32::from_rgb(56, 189, 248)),
+                            .color(Theme::PRIMARY_LIGHT),
                     );
 
                     ui.separator();
@@ -73,9 +74,9 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                     for tool in WhiteboardTool::all() {
                         let is_active = app.whiteboard_tool == *tool;
                         let bg = if is_active {
-                            Color32::from_rgb(2, 132, 199)
+                            Theme::BORDER_ACTIVE
                         } else {
-                            Color32::from_rgb(26, 29, 33)
+                            Theme::SURFACE_2
                         };
 
                         if ui
@@ -101,7 +102,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                     ui.label(
                         RichText::new("Color:")
                             .size(11.0)
-                            .color(Color32::from_rgb(148, 163, 184)),
+                            .color(Theme::TEXT_SECONDARY),
                     );
                     for &(color, name) in &WHITEBOARD_COLORS {
                         let is_selected = app.whiteboard_color == color;
@@ -126,7 +127,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                     ui.label(
                         RichText::new("Size:")
                             .size(11.0)
-                            .color(Color32::from_rgb(148, 163, 184)),
+                            .color(Theme::TEXT_SECONDARY),
                     );
                     ui.add(
                         egui::Slider::new(&mut app.whiteboard_stroke_width, 1.0..=20.0)
@@ -140,12 +141,12 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                     ui.label(
                         RichText::new("Zoom:")
                             .size(11.0)
-                            .color(Color32::from_rgb(148, 163, 184)),
+                            .color(Theme::TEXT_SECONDARY),
                     );
                     if ui
                         .add(
                             egui::Button::new(RichText::new("－").size(11.0).color(Color32::WHITE))
-                                .fill(Color32::from_rgb(26, 29, 33))
+                                .fill(Theme::SURFACE_2)
                                 .rounding(4.0),
                         )
                         .on_hover_text("Zoom Out")
@@ -164,7 +165,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                     if ui
                         .add(
                             egui::Button::new(RichText::new("＋").size(11.0).color(Color32::WHITE))
-                                .fill(Color32::from_rgb(26, 29, 33))
+                                .fill(Theme::SURFACE_2)
                                 .rounding(4.0),
                         )
                         .on_hover_text("Zoom In")
@@ -179,9 +180,9 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                                 egui::Button::new(
                                     RichText::new("1:1")
                                         .size(10.0)
-                                        .color(Color32::from_rgb(148, 163, 184)),
+                                        .color(Theme::TEXT_SECONDARY),
                                 )
-                                .fill(Color32::from_rgb(26, 29, 33))
+                                .fill(Theme::SURFACE_2)
                                 .rounding(4.0),
                             )
                             .on_hover_text("Reset Zoom (100%)")
@@ -198,7 +199,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                             egui::Button::new(
                                 RichText::new("↩ Undo").size(11.0).color(Color32::WHITE),
                             )
-                            .fill(Color32::from_rgb(38, 42, 48))
+                            .fill(Theme::SURFACE_3)
                             .rounding(6.0),
                         )
                         .clicked()
@@ -270,7 +271,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                                         .size(11.0)
                                         .color(Color32::WHITE),
                                 )
-                                .fill(Color32::from_rgb(26, 29, 33))
+                                .fill(Theme::SURFACE_2)
                                 .rounding(6.0),
                             )
                             .clicked()
@@ -287,7 +288,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                         ui.label(
                             RichText::new("Click on canvas to set pos, or enter text:")
                                 .size(11.0)
-                                .color(Color32::from_rgb(56, 189, 248)),
+                                .color(Theme::PRIMARY_LIGHT),
                         );
                         let text_edit = ui.add(
                             egui::TextEdit::singleline(&mut app.whiteboard_text_input)
@@ -300,7 +301,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                                 egui::Button::new(
                                     RichText::new("Place Text").size(11.0).color(Color32::WHITE),
                                 )
-                                .fill(Color32::from_rgb(2, 132, 199))
+                                .fill(Theme::BORDER_ACTIVE)
                                 .rounding(4.0),
                             )
                             .clicked()
@@ -330,7 +331,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
         painter.rect_stroke(
             canvas_rect,
             8.0,
-            Stroke::new(1.5_f32, Color32::from_rgb(38, 42, 48)),
+            Stroke::new(1.5_f32, Theme::SURFACE_3),
         );
 
         // Subtle background dot grid for precision
@@ -660,13 +661,13 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
             WhiteboardTool::Text => {
                 if let Some(pos) = app.whiteboard_text_pos {
                     let p = to_screen(pos.x, pos.y);
-                    painter.circle_filled(p, 4.0, Color32::from_rgb(56, 189, 248));
+                    painter.circle_filled(p, 4.0, Theme::PRIMARY_LIGHT);
                     painter.text(
                         p + Vec2::new(6.0, -8.0),
                         Align2::LEFT_TOP,
                         "Type in toolbar above",
                         FontId::proportional(11.0),
-                        Color32::from_rgb(148, 163, 184),
+                        Theme::TEXT_SECONDARY,
                     );
                 }
             }
@@ -677,7 +678,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                         painter.circle_stroke(
                             pos,
                             16.0,
-                            Stroke::new(1.5_f32, Color32::from_rgb(225, 29, 72)),
+                            Stroke::new(1.5_f32, Theme::CRIMSON),
                         );
                     }
                 }
