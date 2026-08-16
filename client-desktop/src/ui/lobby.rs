@@ -1,4 +1,4 @@
-use egui::{Color32, RichText, Stroke, Ui, Vec2};
+use egui::{Color32, Pos2, RichText, Stroke, Ui, Vec2};
 use crate::app::ConferApp;
 use crate::media::filters::VideoFilter;
 use crate::media::VirtualBackgroundMode;
@@ -24,7 +24,7 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
 
     // Persona-specific theme color
     let persona_color = if app.user_email == "host@confer.local" {
-        Theme::PRIMARY // Electric Blue
+        Theme::PRIMARY // Electric Blue (#0284C7)
     } else if app.user_email == "participant1@confer.local" {
         Color32::from_rgb(139, 92, 246) // Violet (Alice)
     } else {
@@ -185,7 +185,7 @@ fn render_studio_viewfinder_card(
         // 16:9 Video Canvas Surface with Studio Lens Reticle
         let viewport_h = (card_inner_w * 0.5625).max(140.0);
 
-        egui::Frame::group(ui.style())
+        let canvas_response = egui::Frame::group(ui.style())
             .fill(Theme::CANVAS)
             .stroke(Stroke::new(1.5_f32, Theme::SURFACE_3))
             .rounding(Theme::RADIUS_MD)
@@ -209,6 +209,27 @@ fn render_studio_viewfinder_card(
                     });
                 }
             });
+
+        // Overlay Subtle Studio Viewfinder Corner Reticles
+        let cr = canvas_response.response.rect;
+        let p = ui.painter();
+        let reticle_color = Color32::from_rgba_premultiplied(255, 255, 255, 40);
+        let reticle_stroke = Stroke::new(1.5_f32, reticle_color);
+        let r_len = 12.0_f32;
+        let r_pad = 8.0_f32;
+
+        // Top-Left
+        p.line_segment([Pos2::new(cr.min.x + r_pad, cr.min.y + r_pad), Pos2::new(cr.min.x + r_pad + r_len, cr.min.y + r_pad)], reticle_stroke);
+        p.line_segment([Pos2::new(cr.min.x + r_pad, cr.min.y + r_pad), Pos2::new(cr.min.x + r_pad, cr.min.y + r_pad + r_len)], reticle_stroke);
+        // Top-Right
+        p.line_segment([Pos2::new(cr.max.x - r_pad, cr.min.y + r_pad), Pos2::new(cr.max.x - r_pad - r_len, cr.min.y + r_pad)], reticle_stroke);
+        p.line_segment([Pos2::new(cr.max.x - r_pad, cr.min.y + r_pad), Pos2::new(cr.max.x - r_pad, cr.min.y + r_pad + r_len)], reticle_stroke);
+        // Bottom-Left
+        p.line_segment([Pos2::new(cr.min.x + r_pad, cr.max.y - r_pad), Pos2::new(cr.min.x + r_pad + r_len, cr.max.y - r_pad)], reticle_stroke);
+        p.line_segment([Pos2::new(cr.min.x + r_pad, cr.max.y - r_pad), Pos2::new(cr.min.x + r_pad, cr.max.y - r_pad - r_len)], reticle_stroke);
+        // Bottom-Right
+        p.line_segment([Pos2::new(cr.max.x - r_pad, cr.max.y - r_pad), Pos2::new(cr.max.x - r_pad - r_len, cr.max.y - r_pad)], reticle_stroke);
+        p.line_segment([Pos2::new(cr.max.x - r_pad, cr.max.y - r_pad), Pos2::new(cr.max.x - r_pad, cr.max.y - r_pad - r_len)], reticle_stroke);
 
         ui.add_space(14.0);
 
