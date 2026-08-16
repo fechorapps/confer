@@ -24,7 +24,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                     .rounding(Theme::RADIUS_MD)
                     .inner_margin(egui::Margin::symmetric(8.0, 3.0))
                     .show(ui, |ui| {
-                        ui.label(RichText::new("⚡").size(13.0).color(Color32::WHITE));
+                        ui.label(RichText::new("⚡").size(13.0).color(Theme::ON_ACCENT));
                     });
                 ui.add_space(8.0);
                 ui.label(
@@ -51,7 +51,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                     if ui
                         .add(
                             egui::Button::new(
-                                RichText::new("✕ Leave Queue").size(12.0).color(Color32::WHITE),
+                                RichText::new("✕ Leave Queue").size(12.0).color(Theme::ON_ACCENT),
                             )
                             .fill(Theme::CRIMSON)
                             .rounding(Theme::RADIUS_SM),
@@ -114,7 +114,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                 ring_radius + 6.0,
                 Stroke::new(
                     1.5_f32,
-                    Color32::from_rgba_premultiplied(56, 189, 248, 70),
+                    Color32::from_rgba_premultiplied(Theme::PRIMARY_LIGHT.r(), Theme::PRIMARY_LIGHT.g(), Theme::PRIMARY_LIGHT.b(), 70),
                 ),
             );
             // Inner solid primary circle
@@ -122,7 +122,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
 
             // Crisp Vector Shield & Clock Glyph
             let p = ui.painter();
-            let icon_col = Color32::WHITE;
+            let icon_col = Theme::ON_ACCENT;
             p.circle_stroke(center, 10.0, Stroke::new(1.5_f32, icon_col));
             p.line_segment([center, Pos2::new(center.x, center.y - 6.0)], Stroke::new(1.5_f32, icon_col));
             p.line_segment([center, Pos2::new(center.x + 4.0, center.y)], Stroke::new(1.5_f32, icon_col));
@@ -169,7 +169,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                         ui.label(
                             RichText::new("Off Air — You are not visible or audible until admitted")
                                 .size(11.0)
-                                .color(Color32::from_rgb(148, 163, 184)),
+                                .color(Theme::TEXT_SECONDARY),
                         );
                     });
                 });
@@ -254,7 +254,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                 let cam_bg = if app.is_camera_off {
                     Theme::CRIMSON
                 } else {
-                    Color32::from_rgb(16, 185, 129)
+                    Theme::EMERALD
                 };
                 let cam_text = if app.is_camera_off {
                     "📷 Cam Off"
@@ -265,7 +265,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                     .add_sized(
                         Vec2::new(btn_w, 32.0),
                         egui::Button::new(
-                            RichText::new(cam_text).size(11.0).strong().color(Color32::WHITE),
+                            RichText::new(cam_text).size(11.0).strong().color(Theme::ON_ACCENT),
                         )
                         .fill(cam_bg)
                         .rounding(Theme::RADIUS_SM),
@@ -280,7 +280,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                 let mic_bg = if app.is_mic_muted {
                     Theme::CRIMSON
                 } else {
-                    Color32::from_rgb(16, 185, 129)
+                    Theme::EMERALD
                 };
                 let mic_text = if app.is_mic_muted {
                     "🔇 Mic Muted"
@@ -291,7 +291,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                     .add_sized(
                         Vec2::new(btn_w, 32.0),
                         egui::Button::new(
-                            RichText::new(mic_text).size(11.0).strong().color(Color32::WHITE),
+                            RichText::new(mic_text).size(11.0).strong().color(Theme::ON_ACCENT),
                         )
                         .fill(mic_bg)
                         .rounding(Theme::RADIUS_SM),
@@ -313,6 +313,11 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                 } else {
                     "⚡ Denoise OFF"
                 };
+                let denoise_fg = if app.is_ai_denoise_enabled {
+                    Theme::ON_ACCENT
+                } else {
+                    Color32::WHITE
+                };
                 if ui
                     .add_sized(
                         Vec2::new(btn_w, 32.0),
@@ -320,7 +325,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                             RichText::new(denoise_text)
                                 .size(11.0)
                                 .strong()
-                                .color(Color32::WHITE),
+                                .color(denoise_fg),
                         )
                         .fill(denoise_bg)
                         .rounding(Theme::RADIUS_SM),
@@ -360,9 +365,9 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                     } else if i > 14 {
                         Color32::from_rgb(244, 63, 94) // Red Peak
                     } else if i > 10 {
-                        Color32::from_rgb(245, 158, 11) // Amber Mid
+                        Theme::AMBER // Amber Mid
                     } else {
-                        Color32::from_rgb(16, 185, 129) // Emerald Normal
+                        Theme::EMERALD // Emerald Normal
                     };
                     let seg_rect = ui
                         .allocate_exact_size(Vec2::new(segment_w, 7.0), egui::Sense::hover())

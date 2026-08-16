@@ -10,13 +10,13 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
     ui.painter().rect_filled(
         full_rect,
         0.0,
-        Color32::from_rgb(11, 12, 14), // Obsidian Base
+        Theme::CANVAS, // Obsidian Base
     );
 
     // 2. Top Header Bar (Elevated Deep Zinc with Precision Bottom Stroke)
     egui::Frame::group(ui.style())
-        .fill(Color32::from_rgb(18, 20, 24))
-        .stroke(Stroke::new(1.0_f32, Color32::from_rgb(34, 38, 44)))
+        .fill(Theme::SURFACE_1)
+        .stroke(Stroke::new(1.0_f32, Theme::BORDER_SUBTLE))
         .rounding(0.0)
         .inner_margin(egui::Margin::symmetric(20.0, 10.0))
         .show(ui, |ui| {
@@ -24,24 +24,24 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                 // Left Brand & Room Information
                 ui.horizontal(|ui| {
                     egui::Frame::group(ui.style())
-                        .fill(Color32::from_rgb(2, 132, 199))
+                        .fill(Theme::BORDER_ACTIVE)
                         .stroke(Stroke::NONE)
                         .rounding(6.0)
                         .inner_margin(egui::Margin::symmetric(6.0, 3.0))
                         .show(ui, |ui| {
-                            ui.label(RichText::new("⚡").size(12.0).color(Color32::WHITE));
+                            ui.label(RichText::new("⚡").size(12.0).color(Theme::ON_ACCENT));
                         });
                     ui.add_space(4.0);
                     ui.label(
                         RichText::new("CONFER")
                             .size(15.0)
                             .strong()
-                            .color(Color32::from_rgb(248, 250, 252)),
+                            .color(Theme::TEXT_PRIMARY),
                     );
                     ui.label(
                         RichText::new("•")
                             .size(10.0)
-                            .color(Color32::from_rgb(100, 116, 139)),
+                            .color(Theme::TEXT_MUTED),
                     );
                     ui.label(
                         RichText::new(&app.room_title)
@@ -91,7 +91,7 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                     ui.add_space(6.0);
                     egui::Frame::group(ui.style())
                         .fill(Color32::from_rgb(45, 30, 10))
-                        .stroke(Stroke::new(1.0_f32, Color32::from_rgb(245, 158, 11)))
+                        .stroke(Stroke::new(1.0_f32, Theme::AMBER))
                         .rounding(6.0)
                         .inner_margin(egui::Margin::symmetric(8.0, 3.0))
                         .show(ui, |ui| {
@@ -99,7 +99,7 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                                 RichText::new("🔒 LOCKED")
                                     .size(10.5)
                                     .strong()
-                                    .color(Color32::from_rgb(251, 191, 36)),
+                                    .color(Theme::AMBER_LIGHT),
                             );
                         });
                 }
@@ -112,13 +112,18 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                     } else {
                         crate::ui::theme::Theme::SURFACE_2
                     };
+                    let hud_fg = if app.show_diagnostics {
+                        Theme::ON_ACCENT
+                    } else {
+                        Color32::WHITE
+                    };
                     if ui
                         .add(
                             egui::Button::new(
                                 RichText::new("⚡ HUD")
                                     .size(11.0)
                                     .strong()
-                                    .color(Color32::WHITE),
+                                    .color(hud_fg),
                             )
                             .fill(hud_bg)
                             .rounding(crate::ui::theme::Theme::RADIUS_SM),
@@ -229,7 +234,7 @@ fn render_push_to_talk_indicator(app: &ConferApp, ui: &mut Ui, full_rect: Rect) 
     ui.painter().rect_filled(
         ptt_rect,
         18.0,
-        Color32::from_rgba_premultiplied(16, 185, 129, 245),
+        Color32::from_rgba_premultiplied(Theme::EMERALD.r(), Theme::EMERALD.g(), Theme::EMERALD.b(), 245),
     );
     ui.painter().rect_stroke(
         ptt_rect,
@@ -242,7 +247,7 @@ fn render_push_to_talk_indicator(app: &ConferApp, ui: &mut Ui, full_rect: Rect) 
         egui::Align2::CENTER_CENTER,
         "🎙 TRANSMITTING (Push-to-Talk: Spacebar)",
         egui::FontId::proportional(12.5),
-        Color32::WHITE,
+        Theme::ON_ACCENT,
     );
 }
 
@@ -262,8 +267,8 @@ fn render_safety_modals(app: &mut ConferApp, ui: &mut Ui, full_rect: Rect) {
 
         ui.allocate_new_ui(egui::UiBuilder::new().max_rect(modal_rect), |ui| {
             egui::Frame::group(ui.style())
-                .fill(Color32::from_rgb(18, 20, 24))
-                .stroke(Stroke::new(1.5_f32, Color32::from_rgb(225, 29, 72)))
+                .fill(Theme::SURFACE_1)
+                .stroke(Stroke::new(1.5_f32, Theme::CRIMSON))
                 .rounding(16.0)
                 .inner_margin(24.0)
                 .show(ui, |ui| {
@@ -280,7 +285,7 @@ fn render_safety_modals(app: &mut ConferApp, ui: &mut Ui, full_rect: Rect) {
                                 "Are you sure you want to disconnect from this conference room?",
                             )
                             .size(12.5)
-                            .color(Color32::from_rgb(148, 163, 184)),
+                            .color(Theme::TEXT_SECONDARY),
                         );
                         ui.add_space(20.0);
 
@@ -294,7 +299,7 @@ fn render_safety_modals(app: &mut ConferApp, ui: &mut Ui, full_rect: Rect) {
                                             .size(12.5)
                                             .color(Color32::WHITE),
                                     )
-                                    .fill(Color32::from_rgb(38, 42, 48))
+                                    .fill(Theme::SURFACE_3)
                                     .rounding(8.0),
                                 )
                                 .clicked()
@@ -312,9 +317,9 @@ fn render_safety_modals(app: &mut ConferApp, ui: &mut Ui, full_rect: Rect) {
                                         RichText::new("Leave Call (Enter)")
                                             .size(12.5)
                                             .strong()
-                                            .color(Color32::WHITE),
+                                            .color(Theme::ON_ACCENT),
                                     )
-                                    .fill(Color32::from_rgb(225, 29, 72))
+                                    .fill(Theme::CRIMSON)
                                     .rounding(8.0),
                                 )
                                 .clicked()
@@ -344,8 +349,8 @@ fn render_safety_modals(app: &mut ConferApp, ui: &mut Ui, full_rect: Rect) {
 
         ui.allocate_new_ui(egui::UiBuilder::new().max_rect(modal_rect), |ui| {
             egui::Frame::group(ui.style())
-                .fill(Color32::from_rgb(18, 20, 24))
-                .stroke(Stroke::new(1.5_f32, Color32::from_rgb(225, 29, 72)))
+                .fill(Theme::SURFACE_1)
+                .stroke(Stroke::new(1.5_f32, Theme::CRIMSON))
                 .rounding(16.0)
                 .inner_margin(24.0)
                 .show(ui, |ui| {
@@ -362,7 +367,7 @@ fn render_safety_modals(app: &mut ConferApp, ui: &mut Ui, full_rect: Rect) {
                                 "Are you sure you want to remove '{target_name}' from this call?"
                             ))
                             .size(12.5)
-                            .color(Color32::from_rgb(148, 163, 184)),
+                            .color(Theme::TEXT_SECONDARY),
                         );
                         ui.add_space(20.0);
 
@@ -376,7 +381,7 @@ fn render_safety_modals(app: &mut ConferApp, ui: &mut Ui, full_rect: Rect) {
                                             .size(12.5)
                                             .color(Color32::WHITE),
                                     )
-                                    .fill(Color32::from_rgb(38, 42, 48))
+                                    .fill(Theme::SURFACE_3)
                                     .rounding(8.0),
                                 )
                                 .clicked()
@@ -394,9 +399,9 @@ fn render_safety_modals(app: &mut ConferApp, ui: &mut Ui, full_rect: Rect) {
                                         RichText::new("Remove (Enter)")
                                             .size(12.5)
                                             .strong()
-                                            .color(Color32::WHITE),
+                                            .color(Theme::ON_ACCENT),
                                     )
-                                    .fill(Color32::from_rgb(225, 29, 72))
+                                    .fill(Theme::CRIMSON)
                                     .rounding(8.0),
                                 )
                                 .clicked()
@@ -486,7 +491,7 @@ fn render_screen_share_stage(app: &mut ConferApp, ui: &mut Ui) {
                                         RichText::new("⏹ Stop Share")
                                             .size(11.5)
                                             .strong()
-                                            .color(Color32::WHITE),
+                                            .color(Theme::ON_ACCENT),
                                     )
                                     .fill(Theme::CRIMSON)
                                     .rounding(Theme::RADIUS_SM),
@@ -770,7 +775,7 @@ fn render_single_tile(ui: &mut Ui, props: &TileProps<'_>) {
                 ui.painter().rect_stroke(
                     cell_rect.expand(2.0),
                     crate::ui::theme::Theme::RADIUS_LG + 2.0,
-                    Stroke::new(1.5_f32, Color32::from_rgba_premultiplied(16, 185, 129, 70)),
+                    Stroke::new(1.5_f32, Color32::from_rgba_premultiplied(Theme::EMERALD.r(), Theme::EMERALD.g(), Theme::EMERALD.b(), 70)),
                 );
             }
 

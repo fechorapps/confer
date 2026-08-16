@@ -1,4 +1,5 @@
 use crate::app::ConferApp;
+use crate::ui::theme::Theme;
 use crate::sdk::protocol::CaptionChunkDto;
 use egui::{Color32, Pos2, Rect, RichText, Stroke, Ui};
 
@@ -28,9 +29,9 @@ pub fn get_speaker_color(name: &str) -> Color32 {
         .bytes()
         .fold(0u32, |acc, b| acc.wrapping_add(b as u32).wrapping_mul(31));
     match hash % 6 {
-        0 => Color32::from_rgb(56, 189, 248),  // Sky Blue
-        1 => Color32::from_rgb(52, 211, 153),  // Emerald
-        2 => Color32::from_rgb(251, 191, 36),  // Amber
+        0 => Theme::PRIMARY_LIGHT,  // Sky Blue
+        1 => Theme::EMERALD_LIGHT,  // Emerald
+        2 => Theme::AMBER_LIGHT,  // Amber
         3 => Color32::from_rgb(167, 139, 250), // Violet
         4 => Color32::from_rgb(244, 114, 182), // Pink
         _ => Color32::from_rgb(94, 234, 212),  // Teal
@@ -168,7 +169,7 @@ fn render_caption_chunk(ui: &mut Ui, cap: &CaptionChunkDto, now_ms: u64) {
             ui.label(
                 RichText::new(format!("[{lang_tag}]"))
                     .size(10.0)
-                    .color(Color32::from_rgb(148, 163, 184)),
+                    .color(Theme::TEXT_SECONDARY),
             );
         }
 

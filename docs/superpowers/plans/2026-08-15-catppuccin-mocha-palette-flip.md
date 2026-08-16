@@ -219,7 +219,7 @@ Expected: clean compile.
 
 - [ ] **Step 4: Verify zero visual diff**
 
-Run: `git diff client-desktop/src/ui/meeting_room.rs` — confirm exactly the 20 + 2 substitutions above, no other lines touched. For the two rgba sites, confirm the alpha (4th number) is unchanged from the original.
+Run: `git diff client-desktop/src/ui/meeting_room.rs` — confirm exactly the 18 + 2 substitutions above (the table sums to 18 plain occurrences, not 20), no other lines touched. For the two rgba sites, confirm the alpha (4th number) is unchanged from the original.
 
 - [ ] **Step 5: Commit**
 
