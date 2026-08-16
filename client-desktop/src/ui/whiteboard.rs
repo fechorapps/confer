@@ -150,17 +150,59 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                         app.undo_whiteboard_stroke();
                     }
 
-                    if ui
-                        .add(
-                            egui::Button::new(
-                                RichText::new("🗑 Clear").size(11.0).color(Color32::WHITE),
+                    if !app.show_whiteboard_clear_confirmation {
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    RichText::new("🗑 Clear").size(11.0).color(Color32::WHITE),
+                                )
+                                .fill(crate::ui::theme::Theme::CRIMSON)
+                                .rounding(crate::ui::theme::Theme::RADIUS_SM),
                             )
-                            .fill(Color32::from_rgb(225, 29, 72))
-                            .rounding(6.0),
-                        )
-                        .clicked()
-                    {
-                        app.clear_whiteboard();
+                            .on_hover_text("Clear entire whiteboard for all participants")
+                            .clicked()
+                        {
+                            app.show_whiteboard_clear_confirmation = true;
+                        }
+                    } else {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new("Clear all?")
+                                    .size(11.0)
+                                    .strong()
+                                    .color(crate::ui::theme::Theme::CRIMSON_LIGHT),
+                            );
+                            if ui
+                                .add(
+                                    egui::Button::new(
+                                        RichText::new("Yes, Clear")
+                                            .size(10.5)
+                                            .strong()
+                                            .color(Color32::WHITE),
+                                    )
+                                    .fill(crate::ui::theme::Theme::CRIMSON)
+                                    .rounding(crate::ui::theme::Theme::RADIUS_SM),
+                                )
+                                .clicked()
+                            {
+                                app.clear_whiteboard();
+                                app.show_whiteboard_clear_confirmation = false;
+                            }
+                            if ui
+                                .add(
+                                    egui::Button::new(
+                                        RichText::new("Cancel")
+                                            .size(10.5)
+                                            .color(crate::ui::theme::Theme::TEXT_PRIMARY),
+                                    )
+                                    .fill(crate::ui::theme::Theme::SURFACE_3)
+                                    .rounding(crate::ui::theme::Theme::RADIUS_SM),
+                                )
+                                .clicked()
+                            {
+                                app.show_whiteboard_clear_confirmation = false;
+                            }
+                        });
                     }
 
                     // --- Close Whiteboard Button ---

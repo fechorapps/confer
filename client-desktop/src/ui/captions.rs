@@ -2,8 +2,8 @@ use crate::app::ConferApp;
 use crate::sdk::protocol::CaptionChunkDto;
 use egui::{Color32, Pos2, Rect, RichText, Stroke, Ui};
 
-/// Auto-fade duration in seconds for live caption bubbles
-pub const CAPTION_FADE_DURATION_SECS: f32 = 6.0;
+/// Auto-fade duration in seconds for live caption bubbles (10s for high readability)
+pub const CAPTION_FADE_DURATION_SECS: f32 = 10.0;
 /// Maximum number of active caption bubbles displayed simultaneously
 pub const MAX_VISIBLE_CAPTIONS: usize = 3;
 
@@ -343,7 +343,7 @@ mod tests {
                 text: "Old message".to_string(),
                 is_final: true,
                 language: "en-US".to_string(),
-                timestamp_ms: now_ms - 10_000, // 10s old -> expired
+                timestamp_ms: now_ms - 15_000, // 15s old -> expired
             },
             CaptionChunkDto {
                 participant_id: Uuid::new_v4(),

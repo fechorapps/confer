@@ -29,12 +29,23 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                         Theme::SURFACE_2
                     };
 
+                    let level = if app.is_mic_muted { 0.0 } else { app.mic_test_level };
                     let mic_text = if app.is_push_to_talk_active {
-                        "🎙 PTT Active"
+                        "🎙 PTT Active".to_string()
                     } else if app.is_mic_muted {
-                        "🔇 Unmute"
+                        "🔇 Unmute".to_string()
+                    } else if level > 0.35 {
+                        "🎙 Mute (●●●)".to_string()
+                    } else if level > 0.12 {
+                        "🎙 Mute (●●○)".to_string()
                     } else {
-                        "🎙 Mute"
+                        "🎙 Mute (●○○)".to_string()
+                    };
+
+                    let mic_hover = if app.is_mic_muted {
+                        "Microphone Muted (Ctrl+D to unmute, or hold Spacebar for PTT)"
+                    } else {
+                        "Microphone Active (Ctrl+D to mute, audio level responding)"
                     };
 
                     if ui
@@ -48,7 +59,7 @@ pub fn render_controls(app: &mut ConferApp, ui: &mut Ui) {
                             .fill(mic_bg)
                             .rounding(Theme::RADIUS_PILL),
                         )
-                        .on_hover_text("Toggle Mic (Ctrl+D) • Hold Spacebar for Push-to-Talk")
+                        .on_hover_text(mic_hover)
                         .clicked()
                     {
                         app.toggle_mic();

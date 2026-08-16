@@ -166,7 +166,14 @@ impl PeerConnectionEventHandler for RtcPeerHandler {
 
         let publisher_id = {
             let mut mapping = self.subscribe_mapping.lock().await;
-            mapping.remove(0).publisher_id
+            if mapping.is_empty() {
+                tracing::warn!(
+                    "remote track arrived but subscribe offer mapping is exhausted"
+                );
+                Uuid::nil()
+            } else {
+                mapping.remove(0).publisher_id
+            }
         };
 
         let _ = self

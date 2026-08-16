@@ -148,6 +148,7 @@ pub struct ConferApp {
 
     // Safety & Ergonomics State
     pub show_leave_confirmation: bool,
+    pub show_whiteboard_clear_confirmation: bool,
     pub kick_confirmation_target: Option<(Uuid, String)>,
     pub is_push_to_talk_active: bool,
 
@@ -252,6 +253,7 @@ impl ConferApp {
             poll_create_anonymous: false,
 
             show_leave_confirmation: false,
+            show_whiteboard_clear_confirmation: false,
             kick_confirmation_target: None,
             is_push_to_talk_active: false,
 
