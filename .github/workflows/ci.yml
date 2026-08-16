@@ -67,14 +67,18 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+          components: clippy
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: client-desktop
 
-      - name: Cargo Typecheck & Clippy
+      - name: Cargo Typecheck
         run: cargo check --manifest-path client-desktop/Cargo.toml --target ${{ matrix.target }}
+
+      - name: Cargo Clippy
+        run: cargo clippy --manifest-path client-desktop/Cargo.toml --target ${{ matrix.target }} --all-targets -- -D warnings
 
       - name: Run Rust unit tests
         if: runner.os == 'Linux'
