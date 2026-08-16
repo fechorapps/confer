@@ -875,7 +875,7 @@ impl ConferApp {
     }
 
     pub fn handle_global_shortcuts(&mut self, ctx: &egui::Context) {
-        if self.view_state != ViewState::MeetingRoom || self.is_waiting_in_lobby {
+        if self.is_waiting_in_lobby {
             return;
         }
 
@@ -885,7 +885,32 @@ impl ConferApp {
         }
 
         let input = ctx.input(|i| i.clone());
+        let ctrl_or_cmd = input.modifiers.command || input.modifiers.ctrl;
 
+        // Pre-Flight Lobby Shortcuts
+        if self.view_state == ViewState::Lobby {
+            if ctrl_or_cmd {
+                // Ctrl + D -> Toggle Mic
+                if input.key_pressed(egui::Key::D) {
+                    self.toggle_mic();
+                }
+                // Ctrl + E -> Toggle Camera
+                if input.key_pressed(egui::Key::E) {
+                    self.toggle_camera();
+                }
+                // Ctrl + Enter -> Start Meeting Now
+                if input.key_pressed(egui::Key::Enter) && !self.is_connecting {
+                    self.trigger_create_meeting();
+                }
+            }
+            return;
+        }
+
+        if self.view_state != ViewState::MeetingRoom {
+            return;
+        }
+
+        // In-Meeting Shortcuts:
         // 1. Push-to-Talk (Hold Spacebar)
         if input.key_down(egui::Key::Space) {
             if self.is_mic_muted && !self.is_push_to_talk_active {
@@ -904,8 +929,6 @@ impl ConferApp {
         }
 
         // 2. Ctrl/Cmd Mnemonic Hotkeys
-        let ctrl_or_cmd = input.modifiers.command || input.modifiers.ctrl;
-
         if ctrl_or_cmd {
             // Ctrl + D -> Toggle Mic
             if input.key_pressed(egui::Key::D) {

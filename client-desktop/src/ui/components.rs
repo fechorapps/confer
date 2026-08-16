@@ -97,4 +97,20 @@ impl Components {
                 });
             });
     }
+
+    /// Extract up to 2-character uppercase initials from display name (e.g. "Host User" -> "HU")
+    pub fn extract_initials(name: &str) -> String {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            return "U".to_string();
+        }
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        if parts.len() >= 2 {
+            let first = parts[0].chars().next().unwrap_or('U').to_uppercase();
+            let second = parts[1].chars().next().unwrap_or('U').to_uppercase();
+            format!("{}{}", first, second)
+        } else {
+            trimmed.chars().next().unwrap_or('U').to_uppercase().to_string()
+        }
+    }
 }
