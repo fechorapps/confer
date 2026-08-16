@@ -2,11 +2,12 @@ use egui::{Color32, Rect, RichText, ScrollArea, Stroke, Ui, Vec2};
 use uuid::Uuid;
 
 use crate::app::ConferApp;
+use crate::ui::theme::Theme;
 
 pub fn render_polls(app: &mut ConferApp, ui: &mut Ui) {
     egui::Frame::group(ui.style())
         .fill(Color32::from_rgb(18, 20, 23))
-        .stroke(Stroke::new(1.0_f32, Color32::from_rgb(34, 38, 44)))
+        .stroke(Stroke::new(1.0_f32, Theme::BORDER_SUBTLE))
         .rounding(8.0)
         .inner_margin(12.0)
         .show(ui, |ui| {
@@ -16,13 +17,13 @@ pub fn render_polls(app: &mut ConferApp, ui: &mut Ui) {
                     RichText::new("📊 Live Polls & Voting")
                         .strong()
                         .size(14.0)
-                        .color(Color32::from_rgb(248, 250, 252)),
+                        .color(Theme::TEXT_PRIMARY),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui
                         .add(
                             egui::Button::new(RichText::new("✕").size(12.0))
-                                .fill(Color32::from_rgb(26, 29, 33))
+                                .fill(Theme::SURFACE_2)
                                 .rounding(4.0),
                         )
                         .clicked()
@@ -56,7 +57,7 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                         .strong()
                         .color(Color32::WHITE),
                 )
-                .fill(Color32::from_rgb(2, 132, 199))
+                .fill(Theme::BORDER_ACTIVE)
                 .rounding(6.0),
             )
             .clicked()
@@ -82,7 +83,7 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                         RichText::new("No active polls")
                             .size(13.0)
                             .strong()
-                            .color(Color32::from_rgb(148, 163, 184)),
+                            .color(Theme::TEXT_SECONDARY),
                     );
                     ui.add_space(4.0);
                     ui.label(
@@ -90,7 +91,7 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                             "Create a poll to gather real-time feedback from participants.",
                         )
                         .size(11.0)
-                        .color(Color32::from_rgb(100, 116, 139)),
+                        .color(Theme::TEXT_MUTED),
                     );
                 });
                 return;
@@ -113,8 +114,8 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                     .unwrap_or(false);
 
                 egui::Frame::group(ui.style())
-                    .fill(Color32::from_rgb(26, 29, 33))
-                    .stroke(Stroke::new(1.0_f32, Color32::from_rgb(38, 42, 48)))
+                    .fill(Theme::SURFACE_2)
+                    .stroke(Stroke::new(1.0_f32, Theme::SURFACE_3))
                     .rounding(8.0)
                     .inner_margin(10.0)
                     .show(ui, |ui| {
@@ -145,7 +146,7 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                                             RichText::new("● LIVE")
                                                 .size(9.0)
                                                 .strong()
-                                                .color(Color32::from_rgb(52, 211, 153)),
+                                                .color(Theme::EMERALD_LIGHT),
                                         );
                                     });
                             }
@@ -160,7 +161,7 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                                         ui.label(
                                             RichText::new("Multiple Choice")
                                                 .size(9.0)
-                                                .color(Color32::from_rgb(148, 163, 184)),
+                                                .color(Theme::TEXT_SECONDARY),
                                         );
                                     });
                             }
@@ -175,7 +176,7 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                                         ui.label(
                                             RichText::new("🔒 Anonymous")
                                                 .size(9.0)
-                                                .color(Color32::from_rgb(148, 163, 184)),
+                                                .color(Theme::TEXT_SECONDARY),
                                         );
                                     });
                             }
@@ -186,7 +187,7 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                                     ui.label(
                                         RichText::new(&poll.creator_name)
                                             .size(10.0)
-                                            .color(Color32::from_rgb(100, 116, 139)),
+                                            .color(Theme::TEXT_MUTED),
                                     );
                                 },
                             );
@@ -199,7 +200,7 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                             RichText::new(&poll.question)
                                 .size(13.0)
                                 .strong()
-                                .color(Color32::from_rgb(248, 250, 252)),
+                                .color(Theme::TEXT_PRIMARY),
                         );
 
                         ui.add_space(4.0);
@@ -210,7 +211,7 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                                 if poll.total_votes == 1 { "" } else { "s" }
                             ))
                             .size(10.0)
-                            .color(Color32::from_rgb(148, 163, 184)),
+                            .color(Theme::TEXT_SECONDARY),
                         );
 
                         ui.add_space(8.0);
@@ -267,7 +268,7 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                                     .color(Color32::WHITE),
                             )
                             .fill(if can_submit {
-                                Color32::from_rgb(2, 132, 199)
+                                Theme::BORDER_ACTIVE
                             } else {
                                 Color32::from_rgb(45, 50, 58)
                             })
@@ -288,7 +289,7 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
 
                                 ui.horizontal(|ui| {
                                     let label_color = if user_voted_this {
-                                        Color32::from_rgb(56, 189, 248)
+                                        Theme::PRIMARY_LIGHT
                                     } else {
                                         Color32::from_rgb(226, 232, 240)
                                     };
@@ -311,7 +312,7 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                                                 ))
                                                 .size(10.0)
                                                 .strong()
-                                                .color(Color32::from_rgb(148, 163, 184)),
+                                                .color(Theme::TEXT_SECONDARY),
                                             );
                                         },
                                     );
@@ -329,7 +330,7 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
 
                                 // Background track
                                 ui.painter()
-                                    .rect_filled(rect, 4.0, Color32::from_rgb(38, 42, 48));
+                                    .rect_filled(rect, 4.0, Theme::SURFACE_3);
 
                                 // Filled portion
                                 if pct > 0.0 {
@@ -339,7 +340,7 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                                         Vec2::new(fill_w, bar_height),
                                     );
                                     let bar_color = if user_voted_this {
-                                        Color32::from_rgb(2, 132, 199)
+                                        Theme::BORDER_ACTIVE
                                     } else {
                                         Color32::from_rgb(14, 165, 233)
                                     };
@@ -364,7 +365,7 @@ fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                                             egui::Button::new(
                                                 RichText::new("🔒 End & Close Poll")
                                                     .size(10.0)
-                                                    .color(Color32::from_rgb(254, 205, 211)),
+                                                    .color(Theme::CRIMSON_LIGHT),
                                             )
                                             .fill(Color32::from_rgb(159, 18, 57))
                                             .rounding(4.0),
@@ -396,7 +397,7 @@ fn render_poll_creation_form(app: &mut ConferApp, ui: &mut Ui) {
         if ui
             .add(
                 egui::Button::new(RichText::new("← Back").size(11.0).color(Color32::WHITE))
-                    .fill(Color32::from_rgb(38, 42, 48))
+                    .fill(Theme::SURFACE_3)
                     .rounding(4.0),
             )
             .clicked()
@@ -407,7 +408,7 @@ fn render_poll_creation_form(app: &mut ConferApp, ui: &mut Ui) {
             RichText::new("New Poll")
                 .size(13.0)
                 .strong()
-                .color(Color32::from_rgb(248, 250, 252)),
+                .color(Theme::TEXT_PRIMARY),
         );
     });
 
@@ -420,7 +421,7 @@ fn render_poll_creation_form(app: &mut ConferApp, ui: &mut Ui) {
                 RichText::new("Question:")
                     .size(11.0)
                     .strong()
-                    .color(Color32::from_rgb(148, 163, 184)),
+                    .color(Theme::TEXT_SECONDARY),
             );
             ui.add(
                 egui::TextEdit::multiline(&mut app.poll_create_question)
@@ -435,7 +436,7 @@ fn render_poll_creation_form(app: &mut ConferApp, ui: &mut Ui) {
                 RichText::new("Options:")
                     .size(11.0)
                     .strong()
-                    .color(Color32::from_rgb(148, 163, 184)),
+                    .color(Theme::TEXT_SECONDARY),
             );
 
             let mut option_to_remove: Option<usize> = None;
@@ -446,7 +447,7 @@ fn render_poll_creation_form(app: &mut ConferApp, ui: &mut Ui) {
                     ui.label(
                         RichText::new(format!("{}.", idx + 1))
                             .size(11.0)
-                            .color(Color32::from_rgb(148, 163, 184)),
+                            .color(Theme::TEXT_SECONDARY),
                     );
                     ui.add(
                         egui::TextEdit::singleline(opt)
@@ -462,7 +463,7 @@ fn render_poll_creation_form(app: &mut ConferApp, ui: &mut Ui) {
                                         .size(10.0)
                                         .color(Color32::from_rgb(248, 113, 113)),
                                 )
-                                .fill(Color32::from_rgb(38, 42, 48))
+                                .fill(Theme::SURFACE_3)
                                 .rounding(4.0),
                             )
                             .clicked()
@@ -483,9 +484,9 @@ fn render_poll_creation_form(app: &mut ConferApp, ui: &mut Ui) {
                         egui::Button::new(
                             RichText::new("+ Add Option")
                                 .size(11.0)
-                                .color(Color32::from_rgb(56, 189, 248)),
+                                .color(Theme::PRIMARY_LIGHT),
                         )
-                        .fill(Color32::from_rgb(26, 29, 33))
+                        .fill(Theme::SURFACE_2)
                         .rounding(4.0),
                     )
                     .clicked()
@@ -531,7 +532,7 @@ fn render_poll_creation_form(app: &mut ConferApp, ui: &mut Ui) {
                         .color(Color32::WHITE),
                 )
                 .fill(if can_launch {
-                    Color32::from_rgb(2, 132, 199)
+                    Theme::BORDER_ACTIVE
                 } else {
                     Color32::from_rgb(45, 50, 58)
                 })
@@ -544,7 +545,7 @@ fn render_poll_creation_form(app: &mut ConferApp, ui: &mut Ui) {
                 if ui
                     .add(
                         egui::Button::new(RichText::new("Cancel").size(12.0).color(Color32::WHITE))
-                            .fill(Color32::from_rgb(38, 42, 48))
+                            .fill(Theme::SURFACE_3)
                             .rounding(6.0),
                     )
                     .clicked()
