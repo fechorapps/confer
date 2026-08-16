@@ -22,6 +22,15 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
     let side_margin = ((avail_w - content_w) / 2.0).max(16.0);
     let is_compact = avail_w < 960.0;
 
+    // Persona-specific theme color
+    let persona_color = if app.user_email == "host@confer.local" {
+        Theme::PRIMARY // Electric Blue
+    } else if app.user_email == "participant1@confer.local" {
+        Color32::from_rgb(139, 92, 246) // Violet (Alice)
+    } else {
+        Color32::from_rgb(13, 148, 136) // Teal (Bob)
+    };
+
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.vertical_centered(|ui| {
             ui.add_space(20.0);
@@ -36,7 +45,7 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
                 ui.horizontal(|ui| {
                     egui::Frame::group(ui.style())
                         .fill(Theme::PRIMARY)
-                        .stroke(Stroke::NONE)
+                        .stroke(Stroke::new(1.0_f32, Theme::PRIMARY_LIGHT))
                         .rounding(Theme::RADIUS_MD)
                         .inner_margin(egui::Margin::symmetric(8.0, 4.0))
                         .show(ui, |ui| {
@@ -51,7 +60,7 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.add_space(side_margin);
 
-                    // User Identity Badge
+                    // User Identity Badge with Persona Accent
                     egui::Frame::group(ui.style())
                         .fill(Theme::SURFACE_1)
                         .stroke(Stroke::new(1.0_f32, Theme::BORDER_SUBTLE))
@@ -60,7 +69,7 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
                                 let initial = app.user_display_name.chars().next().unwrap_or('U').to_uppercase().to_string();
-                                Components::avatar_badge(ui, &initial, 20.0, 10.0, Theme::PRIMARY);
+                                Components::avatar_badge(ui, &initial, 20.0, 10.0, persona_color);
                                 ui.label(RichText::new(&app.user_display_name).size(12.0).strong().color(Theme::TEXT_PRIMARY));
                                 ui.label(RichText::new("•").size(9.0).color(Theme::TEXT_MUTED));
                                 ui.label(RichText::new(&app.user_email).size(11.0).color(Theme::TEXT_SECONDARY));
@@ -69,7 +78,7 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
 
                     ui.add_space(10.0);
 
-                    // Server Health Status Pill
+                    // Server Health Status Pill (Vibrant Emerald)
                     egui::Frame::group(ui.style())
                         .fill(Theme::SURFACE_1)
                         .stroke(Stroke::new(1.0_f32, Theme::BORDER_SUBTLE))
@@ -77,10 +86,10 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
                         .inner_margin(egui::Margin::symmetric(12.0, 6.0))
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
-                                ui.label(RichText::new("●").size(8.0).color(Theme::EMERALD));
+                                ui.label(RichText::new("●").size(9.0).color(Theme::EMERALD));
                                 ui.label(RichText::new("WebRTC SFU Ready").size(11.0).strong().color(Color32::from_rgb(226, 232, 240)));
                                 ui.label(RichText::new("•").size(9.0).color(Theme::TEXT_MUTED));
-                                ui.label(RichText::new("<40MB Native").size(10.5).color(Theme::TEXT_SECONDARY));
+                                ui.label(RichText::new("<40MB Native").size(10.5).color(Theme::PRIMARY_LIGHT));
                             });
                         });
                 });
@@ -98,7 +107,7 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
                     // --- COMPACT VIEW (VERTICAL STACK) ---
                     ui.vertical(|ui| {
                         ui.set_width(content_w);
-                        render_studio_viewfinder_card(app, ui, content_w);
+                        render_studio_viewfinder_card(app, ui, content_w, persona_color);
                         ui.add_space(16.0);
                         render_meeting_cards_column(app, ui, content_w);
                     });
@@ -109,7 +118,7 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
 
                     ui.vertical(|ui| {
                         ui.set_width(left_col_w);
-                        render_studio_viewfinder_card(app, ui, left_col_w);
+                        render_studio_viewfinder_card(app, ui, left_col_w, persona_color);
                     });
 
                     ui.add_space(24.0);
@@ -129,7 +138,7 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
 }
 
 /// Renders the Left Column Studio Monitor & Device Controls
-fn render_studio_viewfinder_card(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
+fn render_studio_viewfinder_card(app: &mut ConferApp, ui: &mut Ui, col_w: f32, persona_color: Color32) {
     let card_inner_w = (col_w - 40.0).max(100.0);
 
     Theme::card_frame(ui.style()).show(ui, |ui| {
@@ -148,9 +157,14 @@ fn render_studio_viewfinder_card(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
                 } else {
                     Theme::EMERALD
                 };
+                let status_bg = if app.is_camera_off {
+                    Theme::SURFACE_2
+                } else {
+                    Color32::from_rgb(6, 78, 59) // Deep Emerald background
+                };
                 egui::Frame::group(ui.style())
-                    .fill(Theme::CANVAS)
-                    .stroke(Stroke::new(1.0_f32, Theme::BORDER_SUBTLE))
+                    .fill(status_bg)
+                    .stroke(Stroke::new(1.0_f32, if app.is_camera_off { Theme::BORDER_SUBTLE } else { Theme::EMERALD }))
                     .rounding(Theme::RADIUS_PILL)
                     .inner_margin(egui::Margin::symmetric(10.0, 4.0))
                     .show(ui, |ui| {
@@ -183,7 +197,7 @@ fn render_studio_viewfinder_card(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
                     ui.vertical_centered(|ui| {
                         ui.add_space(viewport_h * 0.28);
                         let initial = app.user_display_name.chars().next().unwrap_or('U').to_uppercase().to_string();
-                        Components::avatar_badge(ui, &initial, 54.0, 24.0, Theme::SURFACE_2);
+                        Components::avatar_badge(ui, &initial, 54.0, 24.0, persona_color);
                         ui.add_space(8.0);
                         ui.label(RichText::new("Camera is paused").size(12.5).color(Theme::TEXT_SECONDARY));
                     });
@@ -192,12 +206,12 @@ fn render_studio_viewfinder_card(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
 
         ui.add_space(14.0);
 
-        // Hardware Toggles
+        // Hardware Toggles with Colorized States
         ui.horizontal(|ui| {
             let btn_w = ((card_inner_w - 12.0) / 3.0).max(80.0);
 
             // Camera Toggle
-            let cam_bg = if app.is_camera_off { Theme::CRIMSON } else { Theme::SURFACE_2 };
+            let cam_bg = if app.is_camera_off { Theme::CRIMSON } else { Color32::from_rgb(16, 185, 129) };
             let cam_text = if app.is_camera_off { "📷 Cam Off" } else { "🎥 Cam Active" };
             if ui.add_sized(
                 Vec2::new(btn_w, 34.0),
@@ -207,7 +221,7 @@ fn render_studio_viewfinder_card(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
             }
 
             // Mic Toggle
-            let mic_bg = if app.is_mic_muted { Theme::CRIMSON } else { Theme::SURFACE_2 };
+            let mic_bg = if app.is_mic_muted { Theme::CRIMSON } else { Color32::from_rgb(16, 185, 129) };
             let mic_text = if app.is_mic_muted { "🔇 Mic Muted" } else { "🎙 Mic Active" };
             if ui.add_sized(
                 Vec2::new(btn_w, 34.0),
@@ -218,7 +232,7 @@ fn render_studio_viewfinder_card(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
 
             // AI Denoise Toggle
             let denoise_bg = if app.is_ai_denoise_enabled { Theme::PRIMARY } else { Theme::SURFACE_2 };
-            let denoise_text = if app.is_ai_denoise_enabled { "⚡ AI Denoise ON" } else { "⚡ AI Denoise OFF" };
+            let denoise_text = if app.is_ai_denoise_enabled { "⚡ Denoise ON" } else { "⚡ Denoise OFF" };
             if ui.add_sized(
                 Vec2::new(btn_w, 34.0),
                 egui::Button::new(RichText::new(denoise_text).size(11.5).strong().color(Color32::WHITE)).fill(denoise_bg).rounding(Theme::RADIUS_SM),
@@ -229,7 +243,7 @@ fn render_studio_viewfinder_card(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
 
         ui.add_space(14.0);
 
-        // Responsive Studio Audio VU Visualizer
+        // Responsive Studio Audio VU Visualizer (3-Tier High-Contrast Color Bands)
         ui.horizontal(|ui| {
             ui.label(RichText::new("Mic Energy:").size(11.0).color(Theme::TEXT_SECONDARY));
             let level = if app.is_mic_muted { 0.0 } else { app.mic_test_level };
@@ -245,11 +259,11 @@ fn render_studio_viewfinder_card(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
                 let seg_color = if !is_lit {
                     Theme::SURFACE_2
                 } else if i > 16 {
-                    Theme::CRIMSON // Red Peak
+                    Color32::from_rgb(244, 63, 94) // Red Peak (#F43F5E)
                 } else if i > 12 {
-                    Theme::AMBER // Amber High
+                    Color32::from_rgb(245, 158, 11) // Amber Mid-High (#F59E0B)
                 } else {
-                    Theme::EMERALD // Emerald Good
+                    Color32::from_rgb(16, 185, 129) // Emerald Normal (#10B981)
                 };
                 let seg_rect = ui.allocate_exact_size(Vec2::new(segment_w, 8.0), egui::Sense::hover()).0;
                 ui.painter().rect_filled(seg_rect, 2.0, seg_color);
@@ -260,16 +274,38 @@ fn render_studio_viewfinder_card(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
         ui.separator();
         ui.add_space(10.0);
 
-        // Visual Tone Filters
+        // Visual Tone Filters with Colorized Swatch Badges
         ui.label(RichText::new("Color Tone Preset").size(12.0).strong().color(Theme::TEXT_PRIMARY));
         ui.add_space(6.0);
         egui::ScrollArea::horizontal().id_salt("tone_filters_scroll").show(ui, |ui| {
             ui.horizontal(|ui| {
                 for filter in VideoFilter::all() {
                     let is_active = app.active_filter == *filter;
-                    let bg = if is_active { Theme::PRIMARY } else { Theme::SURFACE_2 };
+                    let (swatch_color, bg) = if is_active {
+                        (Color32::WHITE, Theme::PRIMARY)
+                    } else {
+                        (Color32::from_rgb(148, 163, 184), Theme::SURFACE_2)
+                    };
                     let text_color = if is_active { Color32::WHITE } else { Color32::from_rgb(203, 213, 225) };
-                    if ui.add(egui::Button::new(RichText::new(filter.label()).size(11.0).strong().color(text_color)).fill(bg).rounding(Theme::RADIUS_PILL)).clicked() {
+
+                    let dot = match filter {
+                        VideoFilter::StudioGlow => "✨ ",
+                        VideoFilter::WarmSunset => "🟠 ",
+                        VideoFilter::CoolNordic => "🔵 ",
+                        VideoFilter::NoirBw => "⚪ ",
+                        VideoFilter::VibrantPop => "🟣 ",
+                        VideoFilter::VignetteFocus => "🎯 ",
+                        VideoFilter::VintageFilm => "🟤 ",
+                        VideoFilter::None => "🌿 ",
+                    };
+                    let label = format!("{}{}", dot, filter.label());
+
+                    if ui.add(
+                        egui::Button::new(RichText::new(label).size(11.0).strong().color(text_color))
+                            .fill(bg)
+                            .stroke(Stroke::new(1.0_f32, if is_active { swatch_color } else { Theme::BORDER_SUBTLE }))
+                            .rounding(Theme::RADIUS_PILL),
+                    ).clicked() {
                         app.active_filter = *filter;
                     }
                 }
@@ -302,48 +338,54 @@ fn render_studio_viewfinder_card(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
     });
 }
 
-/// Renders the Profile Persona, Host Meeting, and Join Meeting Cards
+/// Renders the Profile Persona, Host Meeting, and Join Meeting Cards with Vibrant Colors
 fn render_meeting_cards_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
     let card_inner_w = (col_w - 40.0).max(100.0);
 
-    // Card 1: Participant Identity
+    // Card 1: Participant Identity with Colorized Persona Chips
     Theme::card_frame(ui.style()).show(ui, |ui| {
         ui.label(RichText::new("Participant Profile").size(15.0).strong().color(Theme::TEXT_PRIMARY));
         ui.add_space(4.0);
         ui.label(RichText::new("Select a pre-configured profile or customize your identity:").size(11.5).color(Theme::TEXT_SECONDARY));
         ui.add_space(10.0);
 
-        // Quick Persona Switcher Chips
+        // Quick Persona Switcher Chips with Dedicated Colors
         ui.horizontal(|ui| {
             let chip_w = ((card_inner_w - 12.0) / 3.0).max(60.0);
 
+            // Host Chip (Electric Blue / Amber Star)
             let is_host = app.user_email == "host@confer.local";
+            let host_bg = if is_host { Color32::from_rgb(2, 132, 199) } else { Theme::SURFACE_2 };
             if ui.add_sized(
-                Vec2::new(chip_w, 30.0),
-                egui::Button::new(RichText::new("Host (Dev)").size(11.0).strong().color(if is_host { Color32::WHITE } else { Color32::from_rgb(203, 213, 225) }))
-                    .fill(if is_host { Theme::PRIMARY } else { Theme::SURFACE_2 })
+                Vec2::new(chip_w, 32.0),
+                egui::Button::new(RichText::new("★ Host (Dev)").size(11.0).strong().color(if is_host { Color32::WHITE } else { Color32::from_rgb(251, 191, 36) }))
+                    .fill(host_bg)
                     .rounding(Theme::RADIUS_SM),
             ).clicked() {
                 app.user_email = "host@confer.local".to_string();
                 app.user_display_name = "Host User (Dev)".to_string();
             }
 
+            // Alice Chip (Violet)
             let is_alice = app.user_email == "participant1@confer.local";
+            let alice_bg = if is_alice { Color32::from_rgb(139, 92, 246) } else { Theme::SURFACE_2 };
             if ui.add_sized(
-                Vec2::new(chip_w, 30.0),
-                egui::Button::new(RichText::new("Alice (Guest)").size(11.0).strong().color(if is_alice { Color32::WHITE } else { Color32::from_rgb(203, 213, 225) }))
-                    .fill(if is_alice { Theme::PRIMARY } else { Theme::SURFACE_2 })
+                Vec2::new(chip_w, 32.0),
+                egui::Button::new(RichText::new("👩 Alice (Guest)").size(11.0).strong().color(if is_alice { Color32::WHITE } else { Color32::from_rgb(216, 180, 254) }))
+                    .fill(alice_bg)
                     .rounding(Theme::RADIUS_SM),
             ).clicked() {
                 app.user_email = "participant1@confer.local".to_string();
                 app.user_display_name = "Alice (Dev)".to_string();
             }
 
+            // Bob Chip (Teal)
             let is_bob = app.user_email == "participant2@confer.local";
+            let bob_bg = if is_bob { Color32::from_rgb(13, 148, 136) } else { Theme::SURFACE_2 };
             if ui.add_sized(
-                Vec2::new(chip_w, 30.0),
-                egui::Button::new(RichText::new("Bob (Guest)").size(11.0).strong().color(if is_bob { Color32::WHITE } else { Color32::from_rgb(203, 213, 225) }))
-                    .fill(if is_bob { Theme::PRIMARY } else { Theme::SURFACE_2 })
+                Vec2::new(chip_w, 32.0),
+                egui::Button::new(RichText::new("👨 Bob (Guest)").size(11.0).strong().color(if is_bob { Color32::WHITE } else { Color32::from_rgb(153, 246, 228) }))
+                    .fill(bob_bg)
                     .rounding(Theme::RADIUS_SM),
             ).clicked() {
                 app.user_email = "participant2@confer.local".to_string();
@@ -367,14 +409,14 @@ fn render_meeting_cards_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
 
     ui.add_space(16.0);
 
-    // Card 2: Host New Instant Meeting
+    // Card 2: Host New Instant Meeting (Vibrant Sapphire/Electric Blue)
     Theme::focused_card_frame(ui.style()).show(ui, |ui| {
         ui.horizontal(|ui| {
             ui.label(RichText::new("Start New Meeting").size(15.0).strong().color(Color32::WHITE));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 egui::Frame::group(ui.style())
                     .fill(Color32::from_rgb(12, 74, 110))
-                    .stroke(Stroke::NONE)
+                    .stroke(Stroke::new(1.0_f32, Theme::PRIMARY_LIGHT))
                     .rounding(Theme::RADIUS_PILL)
                     .inner_margin(egui::Margin::symmetric(8.0, 2.0))
                     .show(ui, |ui| {
@@ -399,7 +441,7 @@ fn render_meeting_cards_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
 
         ui.add_space(12.0);
 
-        // Full-Width Start Meeting Action Button
+        // Full-Width Start Meeting Action Button (Vibrant Primary Blue)
         if ui.add_sized(
             Vec2::new(card_inner_w, 38.0),
             Components::primary_button("Start Meeting Now", 13.0),
@@ -410,14 +452,14 @@ fn render_meeting_cards_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
 
     ui.add_space(16.0);
 
-    // Card 3: Join Meeting by 6-Character Code
+    // Card 3: Join Meeting by 6-Character Code (Vibrant Emerald Connection)
     Theme::card_frame(ui.style()).show(ui, |ui| {
         ui.label(RichText::new("Join with Code").size(15.0).strong().color(Theme::TEXT_PRIMARY));
         ui.add_space(4.0);
         ui.label(RichText::new("Enter the 6-character room code provided by the meeting host:").size(11.5).color(Theme::TEXT_SECONDARY));
         ui.add_space(10.0);
 
-        // Responsive Join Code Row
+        // Responsive Join Code Row with Emerald Button
         ui.horizontal(|ui| {
             let btn_w = 110.0_f32;
             let input_w = (card_inner_w - btn_w - 10.0).max(80.0);
@@ -432,7 +474,7 @@ fn render_meeting_cards_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
             app.join_code_input = app.join_code_input.to_uppercase();
 
             let can_join = !app.join_code_input.trim().is_empty();
-            let join_bg = if can_join { Theme::EMERALD } else { Theme::SURFACE_2 };
+            let join_bg = if can_join { Color32::from_rgb(16, 185, 129) } else { Theme::SURFACE_2 };
             let join_text_color = if can_join { Color32::WHITE } else { Theme::TEXT_MUTED };
 
             if (ui.add_sized(
