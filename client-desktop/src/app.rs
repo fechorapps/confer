@@ -181,6 +181,9 @@ pub struct ConferApp {
     /// Active GPU textures for remote participant video feeds.
     pub remote_video_textures: HashMap<Uuid, TextureHandle>,
 
+    /// Timestamp when join code was copied to clipboard for ephemeral toast feedback
+    pub code_copied_time: Option<f64>,
+
     /// Selected cockpit tab in the Pre-Flight Lobby (Host vs Join)
     pub lobby_action_tab: LobbyActionTab,
 }
@@ -297,6 +300,7 @@ impl ConferApp {
             local_frame_tx: None,
             remote_frame_rx: None,
             remote_video_textures: HashMap::new(),
+            code_copied_time: None,
             lobby_action_tab: LobbyActionTab::default(),
         }
     }
@@ -947,6 +951,7 @@ impl ConferApp {
         self.is_push_to_talk_active = false;
         self.current_meeting_id = None;
         self.current_join_code = None;
+        self.code_copied_time = None;
     }
 
     pub fn handle_global_shortcuts(&mut self, ctx: &egui::Context) {

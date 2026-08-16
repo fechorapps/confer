@@ -1,4 +1,5 @@
 use crate::app::ConferApp;
+use crate::ui::theme::Theme;
 use crate::ui::{captions, chat, controls, diagnostics, polls, roster, watermark, whiteboard};
 use egui::{Color32, Pos2, Rect, RichText, Stroke, TextureHandle, Ui, Vec2};
 
@@ -50,25 +51,38 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                     );
                 });
 
-                // Join Code Pill (Click to copy)
+                // Join Code Pill (Click to copy with ephemeral '✓ Copied!' feedback)
                 if let Some(code) = &app.current_join_code {
                     ui.add_space(8.0);
+                    let now = ui.input(|i| i.time);
+                    let is_recently_copied = app
+                        .code_copied_time
+                        .is_some_and(|t| now - t < 2.0);
+
+                    let (code_text, code_col) = if is_recently_copied {
+                        ("✓ Copied!".to_string(), Theme::EMERALD)
+                    } else {
+                        (format!("CODE: {code}"), Theme::PRIMARY_LIGHT)
+                    };
+
                     let code_btn = ui.add(
                         egui::Button::new(
-                            RichText::new(format!("CODE: {code}"))
+                            RichText::new(code_text)
                                 .size(11.0)
                                 .strong()
-                                .color(Color32::from_rgb(56, 189, 248)),
+                                .font(egui::FontId::monospace(11.0))
+                                .color(code_col),
                         )
-                        .fill(Color32::from_rgb(26, 29, 33))
-                        .stroke(Stroke::new(1.0_f32, Color32::from_rgb(38, 42, 48)))
-                        .rounding(6.0),
+                        .fill(Theme::SURFACE_2)
+                        .stroke(Stroke::new(1.0_f32, Theme::BORDER_SUBTLE))
+                        .rounding(Theme::RADIUS_SM),
                     );
                     if code_btn
                         .on_hover_text("Click to copy room code to clipboard")
                         .clicked()
                     {
                         ui.output_mut(|o| o.copied_text = code.clone());
+                        app.code_copied_time = Some(now);
                     }
                 }
 
@@ -711,7 +725,7 @@ fn render_single_tile(ui: &mut Ui, props: &TileProps<'_>) {
     let bg_color = if props.is_video_muted {
         crate::ui::theme::Theme::SURFACE_1
     } else {
-        crate::ui::theme::Theme::CANVAS
+        Color32::from_rgb(5, 6, 8) // Deep letterbox canvas
     };
 
     egui::Frame::group(ui.style())
@@ -723,6 +737,16 @@ fn render_single_tile(ui: &mut Ui, props: &TileProps<'_>) {
             ui.set_width(props.width);
             ui.set_height(props.height);
 
+            // Active Speaker 2-Pass Ambient Halo
+            if props.is_active_speaker {
+                let cell_rect = ui.min_rect();
+                ui.painter().rect_stroke(
+                    cell_rect.expand(2.0),
+                    crate::ui::theme::Theme::RADIUS_LG + 2.0,
+                    Stroke::new(1.5_f32, Color32::from_rgba_premultiplied(16, 185, 129, 70)),
+                );
+            }
+
             if props.is_sharing {
                 ui.vertical_centered(|ui| {
                     ui.add_space(props.height * 0.35);
@@ -730,7 +754,7 @@ fn render_single_tile(ui: &mut Ui, props: &TileProps<'_>) {
                         RichText::new("🖥 Screen Share Active")
                             .size(15.0)
                             .strong()
-                            .color(Color32::from_rgb(56, 189, 248)),
+                            .color(crate::ui::theme::Theme::PRIMARY_LIGHT),
                     );
                 });
             } else if props.is_video_muted {
@@ -761,17 +785,27 @@ fn render_single_tile(ui: &mut Ui, props: &TileProps<'_>) {
                         RichText::new(props.name)
                             .size(12.5)
                             .strong()
-                            .color(Color32::from_rgb(203, 213, 225)),
+                            .color(crate::ui::theme::Theme::TEXT_PRIMARY),
                     );
                 });
             } else if let Some(tex) = props.local_texture {
-                let img_w = (props.width - 2.0).max(40.0);
-                let img_h = (props.height - 2.0).max(40.0);
+                // 16:9 Letterbox / Pillarbox Fit (No aspect distortion)
+                let target_aspect = 16.0_f32 / 9.0_f32;
+                let cell_w = (props.width - 2.0).max(40.0);
+                let cell_h = (props.height - 2.0).max(40.0);
+                let cell_aspect = cell_w / cell_h;
+
+                let (draw_w, draw_h) = if cell_aspect > target_aspect {
+                    (cell_h * target_aspect, cell_h)
+                } else {
+                    (cell_w, cell_w / target_aspect)
+                };
+
                 ui.centered_and_justified(|ui| {
                     ui.add(
                         egui::Image::new(tex)
-                            .fit_to_exact_size(Vec2::new(img_w, img_h))
-                            .rounding(14.0),
+                            .fit_to_exact_size(Vec2::new(draw_w, draw_h))
+                            .rounding(crate::ui::theme::Theme::RADIUS_MD),
                     );
                 });
             } else {
@@ -780,13 +814,13 @@ fn render_single_tile(ui: &mut Ui, props: &TileProps<'_>) {
                     ui.label(
                         RichText::new("🎥 Video Stream")
                             .size(13.5)
-                            .color(Color32::from_rgb(148, 163, 184)),
+                            .color(crate::ui::theme::Theme::TEXT_SECONDARY),
                     );
                     if props.is_local {
                         ui.label(
                             RichText::new("(You)")
                                 .size(11.0)
-                                .color(Color32::from_rgb(100, 116, 139)),
+                                .color(crate::ui::theme::Theme::TEXT_MUTED),
                         );
                     }
                 });
@@ -800,9 +834,9 @@ fn render_single_tile(ui: &mut Ui, props: &TileProps<'_>) {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.add_space(8.0);
                             egui::Frame::group(ui.style())
-                                .fill(Color32::from_rgb(245, 158, 11))
+                                .fill(crate::ui::theme::Theme::AMBER)
                                 .stroke(Stroke::NONE)
-                                .rounding(12.0)
+                                .rounding(crate::ui::theme::Theme::RADIUS_PILL)
                                 .inner_margin(egui::Margin::symmetric(8.0, 3.0))
                                 .show(ui, |ui| {
                                     ui.label(
@@ -817,7 +851,7 @@ fn render_single_tile(ui: &mut Ui, props: &TileProps<'_>) {
                 });
             }
 
-            // Bottom-Left Floating Identity & Mic Status Pill
+            // Bottom-Left Floating Identity, Mic & Waveform Status Pill
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
@@ -836,6 +870,16 @@ fn render_single_tile(ui: &mut Ui, props: &TileProps<'_>) {
                                     crate::ui::theme::Theme::EMERALD
                                 };
                                 ui.label(RichText::new(mic_icon).size(11.0).color(mic_color));
+
+                                // Active Speaker Audio Waveform Badge for Colorblind Accessibility
+                                if props.is_active_speaker && !props.is_audio_muted {
+                                    ui.label(
+                                        RichText::new("ılı")
+                                            .size(11.0)
+                                            .strong()
+                                            .color(crate::ui::theme::Theme::EMERALD),
+                                    );
+                                }
 
                                 let name_label = if props.is_local {
                                     format!("{} (You)", props.name)
