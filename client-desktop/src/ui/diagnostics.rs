@@ -1,5 +1,6 @@
 use crate::app::ConferApp;
-use egui::{Color32, RichText, Stroke, Window};
+use crate::ui::theme::Theme;
+use egui::{RichText, Stroke, Window};
 
 pub fn render_diagnostics(app: &mut ConferApp, ctx: &egui::Context) {
     Window::new("📊 WebRTC Telemetry HUD")
@@ -9,16 +10,16 @@ pub fn render_diagnostics(app: &mut ConferApp, ctx: &egui::Context) {
             ui.set_width(320.0);
 
             egui::Frame::group(ui.style())
-                .fill(Color32::from_rgb(18, 20, 23))
-                .stroke(Stroke::new(1.0_f32, Color32::from_rgb(34, 38, 44)))
-                .rounding(8.0)
+                .fill(Theme::SURFACE_1)
+                .stroke(Stroke::new(1.0_f32, Theme::BORDER_SUBTLE))
+                .rounding(Theme::RADIUS_MD)
                 .inner_margin(12.0)
                 .show(ui, |ui| {
                     ui.label(
                         RichText::new("SYSTEM EFFICIENCY")
                             .size(11.0)
                             .strong()
-                            .color(Color32::from_rgb(56, 189, 248)),
+                            .color(Theme::PRIMARY_LIGHT),
                     );
                     ui.add_space(6.0);
 
@@ -26,14 +27,14 @@ pub fn render_diagnostics(app: &mut ConferApp, ctx: &egui::Context) {
                         ui.label(
                             RichText::new("Memory Footprint:")
                                 .size(12.0)
-                                .color(Color32::from_rgb(148, 163, 184)),
+                                .color(Theme::TEXT_SECONDARY),
                         );
                         match get_process_memory_mb() {
                             Some(mem_mb) => {
                                 let color = if mem_mb < 40.0 {
-                                    Color32::from_rgb(16, 185, 129)
+                                    Theme::EMERALD
                                 } else {
-                                    Color32::from_rgb(245, 158, 11)
+                                    Theme::AMBER
                                 };
                                 ui.label(
                                     RichText::new(format!("{:.1} MB", mem_mb))
@@ -44,7 +45,7 @@ pub fn render_diagnostics(app: &mut ConferApp, ctx: &egui::Context) {
                                 ui.label(
                                     RichText::new("(< 40MB target)")
                                         .size(10.0)
-                                        .color(Color32::from_rgb(100, 116, 139)),
+                                        .color(Theme::TEXT_MUTED),
                                 );
                             }
                             None => {
@@ -52,7 +53,7 @@ pub fn render_diagnostics(app: &mut ConferApp, ctx: &egui::Context) {
                                     RichText::new("—")
                                         .strong()
                                         .size(12.0)
-                                        .color(Color32::from_rgb(100, 116, 139)),
+                                        .color(Theme::TEXT_MUTED),
                                 );
                             }
                         }
@@ -62,13 +63,13 @@ pub fn render_diagnostics(app: &mut ConferApp, ctx: &egui::Context) {
                         ui.label(
                             RichText::new("Latency (RTT):")
                                 .size(12.0)
-                                .color(Color32::from_rgb(148, 163, 184)),
+                                .color(Theme::TEXT_SECONDARY),
                         );
                         let rtt = app.rtt_ms;
                         let color = if rtt < 60 {
-                            Color32::from_rgb(16, 185, 129)
+                            Theme::EMERALD
                         } else {
-                            Color32::from_rgb(245, 158, 11)
+                            Theme::AMBER
                         };
                         ui.label(
                             RichText::new(format!("{} ms", rtt))
@@ -82,13 +83,13 @@ pub fn render_diagnostics(app: &mut ConferApp, ctx: &egui::Context) {
                         ui.label(
                             RichText::new("Packet Loss:")
                                 .size(12.0)
-                                .color(Color32::from_rgb(148, 163, 184)),
+                                .color(Theme::TEXT_SECONDARY),
                         );
                         let loss = app.packet_loss_pct;
                         let color = if loss < 0.5 {
-                            Color32::from_rgb(16, 185, 129)
+                            Theme::EMERALD
                         } else {
-                            Color32::from_rgb(244, 63, 94)
+                            Theme::CRIMSON
                         };
                         ui.label(
                             RichText::new(format!("{:.1}%", loss))
@@ -106,40 +107,21 @@ pub fn render_diagnostics(app: &mut ConferApp, ctx: &egui::Context) {
                         RichText::new("MEDIA ENGINE")
                             .size(11.0)
                             .strong()
-                            .color(Color32::from_rgb(56, 189, 248)),
+                            .color(Theme::PRIMARY_LIGHT),
                     );
                     ui.add_space(6.0);
 
-                    // Static capture/encode configuration (not live telemetry)
+                    // Static capture/encode configuration
                     ui.horizontal(|ui| {
                         ui.label(
                             RichText::new("Video Pipeline:")
                                 .size(12.0)
-                                .color(Color32::from_rgb(148, 163, 184)),
+                                .color(Theme::TEXT_SECONDARY),
                         );
                         ui.label(
                             RichText::new("V4L2 720p HD (30 FPS)")
                                 .size(12.0)
-                                .color(Color32::from_rgb(248, 250, 252)),
-                        );
-                        ui.label(
-                            RichText::new("(config)")
-                                .size(10.0)
-                                .color(Color32::from_rgb(100, 116, 139)),
-                        );
-                    });
-
-                    // Simulcast layer selection is not tracked client-side yet
-                    ui.horizontal(|ui| {
-                        ui.label(
-                            RichText::new("Simulcast Layer:")
-                                .size(12.0)
-                                .color(Color32::from_rgb(148, 163, 184)),
-                        );
-                        ui.label(
-                            RichText::new("—")
-                                .size(12.0)
-                                .color(Color32::from_rgb(100, 116, 139)),
+                                .color(Theme::TEXT_PRIMARY),
                         );
                     });
 
@@ -147,17 +129,36 @@ pub fn render_diagnostics(app: &mut ConferApp, ctx: &egui::Context) {
                         ui.label(
                             RichText::new("Audio Encoding:")
                                 .size(12.0)
-                                .color(Color32::from_rgb(148, 163, 184)),
+                                .color(Theme::TEXT_SECONDARY),
                         );
                         ui.label(
                             RichText::new("Opus 48kHz Stereo")
                                 .size(12.0)
-                                .color(Color32::from_rgb(248, 250, 252)),
+                                .color(Theme::TEXT_PRIMARY),
                         );
+                    });
+
+                    ui.horizontal(|ui| {
                         ui.label(
-                            RichText::new("(config)")
-                                .size(10.0)
-                                .color(Color32::from_rgb(100, 116, 139)),
+                            RichText::new("AI Noise Filter:")
+                                .size(12.0)
+                                .color(Theme::TEXT_SECONDARY),
+                        );
+                        let denoise_text = if app.is_ai_denoise_enabled {
+                            "⚡ RNNoise Active"
+                        } else {
+                            "Off"
+                        };
+                        let denoise_color = if app.is_ai_denoise_enabled {
+                            Theme::EMERALD
+                        } else {
+                            Theme::TEXT_MUTED
+                        };
+                        ui.label(
+                            RichText::new(denoise_text)
+                                .strong()
+                                .size(12.0)
+                                .color(denoise_color),
                         );
                     });
                 });

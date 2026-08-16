@@ -1,17 +1,17 @@
 use crate::app::ConferApp;
+use crate::ui::theme::Theme;
 use egui::{Color32, RichText, Stroke, Ui, Vec2};
 
 pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
     let full_rect = ui.available_rect_before_wrap();
 
     // Dark Obsidian canvas background
-    ui.painter()
-        .rect_filled(full_rect, 0.0, Color32::from_rgb(11, 12, 14));
+    ui.painter().rect_filled(full_rect, 0.0, Theme::CANVAS);
 
     // Top Header Bar
     egui::Frame::group(ui.style())
-        .fill(Color32::from_rgb(18, 20, 23))
-        .stroke(Stroke::new(1.0_f32, Color32::from_rgb(34, 38, 44)))
+        .fill(Theme::SURFACE_1)
+        .stroke(Stroke::new(1.0_f32, Theme::BORDER_SUBTLE))
         .rounding(0.0)
         .inner_margin(egui::Margin::symmetric(24.0, 14.0))
         .show(ui, |ui| {
@@ -20,26 +20,26 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                     RichText::new("CONFER")
                         .size(16.0)
                         .strong()
-                        .color(Color32::from_rgb(56, 189, 248)),
+                        .color(Theme::PRIMARY_LIGHT),
                 );
-                ui.label(RichText::new("•").color(Color32::from_rgb(71, 85, 105)));
+                ui.label(RichText::new("•").color(Theme::TEXT_MUTED));
                 ui.label(
                     RichText::new("Waiting Room")
                         .size(14.0)
                         .strong()
-                        .color(Color32::from_rgb(248, 250, 252)),
+                        .color(Theme::TEXT_PRIMARY),
                 );
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui
                         .add(
                             egui::Button::new(
-                                RichText::new("✕ Leave Meeting")
+                                RichText::new("✕ Leave")
                                     .size(12.0)
                                     .color(Color32::WHITE),
                             )
-                            .fill(Color32::from_rgb(225, 29, 72))
-                            .rounding(6.0),
+                            .fill(Theme::CRIMSON)
+                            .rounding(Theme::RADIUS_SM),
                         )
                         .clicked()
                     {
@@ -57,9 +57,9 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
         ui.add_space((available_size.y * 0.12).max(20.0));
 
         egui::Frame::group(ui.style())
-            .fill(Color32::from_rgb(18, 20, 23))
-            .stroke(Stroke::new(1.0_f32, Color32::from_rgb(38, 42, 48)))
-            .rounding(16.0)
+            .fill(Theme::SURFACE_1)
+            .stroke(Stroke::new(1.0_f32, Theme::BORDER_SUBTLE))
+            .rounding(Theme::RADIUS_LG)
             .inner_margin(28.0)
             .show(ui, |ui| {
                 ui.set_width(card_width);
@@ -80,8 +80,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                     Stroke::new(1.5_f32, Color32::from_rgba_premultiplied(56, 189, 248, 80)),
                 );
                 // Inner solid circle
-                ui.painter()
-                    .circle_filled(center, 24.0, Color32::from_rgb(2, 132, 199));
+                ui.painter().circle_filled(center, 24.0, Theme::PRIMARY);
                 // Hourglass / Shield icon inside circle
                 ui.painter().text(
                     center,
@@ -103,7 +102,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                     RichText::new(title)
                         .size(20.0)
                         .strong()
-                        .color(Color32::from_rgb(248, 250, 252)),
+                        .color(Theme::TEXT_PRIMARY),
                 );
 
                 ui.add_space(6.0);
@@ -116,7 +115,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                 ui.label(
                     RichText::new(waiting_msg)
                         .size(13.0)
-                        .color(Color32::from_rgb(148, 163, 184)),
+                        .color(Theme::TEXT_SECONDARY),
                 );
 
                 ui.add_space(20.0);
@@ -125,9 +124,9 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
 
                 // Participant Info Pill
                 egui::Frame::group(ui.style())
-                    .fill(Color32::from_rgb(26, 29, 33))
-                    .stroke(Stroke::new(1.0_f32, Color32::from_rgb(38, 42, 48)))
-                    .rounding(10.0)
+                    .fill(Theme::SURFACE_2)
+                    .stroke(Stroke::new(1.0_f32, Theme::BORDER_SUBTLE))
+                    .rounding(Theme::RADIUS_MD)
                     .inner_margin(12.0)
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
@@ -139,7 +138,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                                 .to_uppercase()
                                 .to_string();
                             egui::Frame::group(ui.style())
-                                .fill(Color32::from_rgb(2, 132, 199))
+                                .fill(Theme::PRIMARY)
                                 .stroke(Stroke::NONE)
                                 .rounding(16.0)
                                 .inner_margin(8.0)
@@ -159,13 +158,13 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                                     RichText::new(&app.user_display_name)
                                         .size(13.0)
                                         .strong()
-                                        .color(Color32::from_rgb(248, 250, 252)),
+                                        .color(Theme::TEXT_PRIMARY),
                                 );
                                 if !app.user_email.is_empty() {
                                     ui.label(
                                         RichText::new(&app.user_email)
                                             .size(11.0)
-                                            .color(Color32::from_rgb(148, 163, 184)),
+                                            .color(Theme::TEXT_SECONDARY),
                                     );
                                 }
                             });
@@ -175,18 +174,15 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                                 |ui| {
                                     egui::Frame::group(ui.style())
                                         .fill(Color32::from_rgb(45, 30, 10))
-                                        .stroke(Stroke::new(
-                                            1.0_f32,
-                                            Color32::from_rgb(245, 158, 11),
-                                        ))
-                                        .rounding(6.0)
+                                        .stroke(Stroke::new(1.0_f32, Theme::AMBER))
+                                        .rounding(Theme::RADIUS_SM)
                                         .inner_margin(egui::Margin::symmetric(8.0, 3.0))
                                         .show(ui, |ui| {
                                             ui.label(
                                                 RichText::new("WAITING")
                                                     .size(10.0)
                                                     .strong()
-                                                    .color(Color32::from_rgb(251, 191, 36)),
+                                                    .color(Theme::AMBER),
                                             );
                                         });
                                 },
@@ -201,7 +197,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                     ui.label(
                         RichText::new("Pre-join check:")
                             .size(11.0)
-                            .color(Color32::from_rgb(100, 116, 139)),
+                            .color(Theme::TEXT_MUTED),
                     );
 
                     let mic_icon = if app.is_mic_muted {
@@ -210,13 +206,13 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                         "🎙 Mic Ready"
                     };
                     let mic_col = if app.is_mic_muted {
-                        Color32::from_rgb(244, 63, 94)
+                        Theme::CRIMSON
                     } else {
-                        Color32::from_rgb(16, 185, 129)
+                        Theme::EMERALD
                     };
                     ui.label(RichText::new(mic_icon).size(11.0).color(mic_col));
 
-                    ui.label(RichText::new("•").color(Color32::from_rgb(71, 85, 105)));
+                    ui.label(RichText::new("•").color(Theme::TEXT_MUTED));
 
                     let cam_icon = if app.is_camera_off {
                         "📷 Camera Off"
@@ -224,9 +220,9 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                         "🎥 Camera Ready"
                     };
                     let cam_col = if app.is_camera_off {
-                        Color32::from_rgb(244, 63, 94)
+                        Theme::CRIMSON
                     } else {
-                        Color32::from_rgb(16, 185, 129)
+                        Theme::EMERALD
                     };
                     ui.label(RichText::new(cam_icon).size(11.0).color(cam_col));
                 });
@@ -242,8 +238,8 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                                 .strong()
                                 .color(Color32::WHITE),
                         )
-                        .fill(Color32::from_rgb(225, 29, 72))
-                        .rounding(8.0)
+                        .fill(Theme::CRIMSON)
+                        .rounding(Theme::RADIUS_MD)
                         .min_size(Vec2::new(card_width - 24.0, 36.0)),
                     )
                     .clicked()
