@@ -114,7 +114,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                 ring_radius + 6.0,
                 Stroke::new(
                     1.5_f32,
-                    Color32::from_rgba_premultiplied(56, 189, 248, 70),
+                    Color32::from_rgba_premultiplied(Theme::PRIMARY_LIGHT.r(), Theme::PRIMARY_LIGHT.g(), Theme::PRIMARY_LIGHT.b(), 70),
                 ),
             );
             // Inner solid primary circle
@@ -169,7 +169,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                         ui.label(
                             RichText::new("Off Air — You are not visible or audible until admitted")
                                 .size(11.0)
-                                .color(Color32::from_rgb(148, 163, 184)),
+                                .color(Theme::TEXT_SECONDARY),
                         );
                     });
                 });
@@ -254,7 +254,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                 let cam_bg = if app.is_camera_off {
                     Theme::CRIMSON
                 } else {
-                    Color32::from_rgb(16, 185, 129)
+                    Theme::EMERALD
                 };
                 let cam_text = if app.is_camera_off {
                     "📷 Cam Off"
@@ -280,7 +280,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                 let mic_bg = if app.is_mic_muted {
                     Theme::CRIMSON
                 } else {
-                    Color32::from_rgb(16, 185, 129)
+                    Theme::EMERALD
                 };
                 let mic_text = if app.is_mic_muted {
                     "🔇 Mic Muted"
@@ -360,9 +360,9 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                     } else if i > 14 {
                         Color32::from_rgb(244, 63, 94) // Red Peak
                     } else if i > 10 {
-                        Color32::from_rgb(245, 158, 11) // Amber Mid
+                        Theme::AMBER // Amber Mid
                     } else {
-                        Color32::from_rgb(16, 185, 129) // Emerald Normal
+                        Theme::EMERALD // Emerald Normal
                     };
                     let seg_rect = ui
                         .allocate_exact_size(Vec2::new(segment_w, 7.0), egui::Sense::hover())
