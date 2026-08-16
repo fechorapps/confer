@@ -41,6 +41,7 @@ subtle = "2.5"
 cpal = "0.15"
 opus = "0.3"
 zenyuv = "0.1"
+catppuccin-egui = { version = "5.7.0", default-features = false, features = ["egui29"] }
 
 [build-dependencies]
 cc = "1.4.3"

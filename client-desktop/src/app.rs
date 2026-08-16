@@ -1,4 +1,4 @@
-use egui::{Color32, Pos2, TextureHandle, Visuals};
+use egui::{Color32, Pos2, TextureHandle};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -1331,7 +1331,8 @@ impl ConferApp {
 impl eframe::App for ConferApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Dark theme matching Confer design system (Obsidian & Deep Zinc)
-        let mut visuals = Visuals::dark();
+        catppuccin_egui::set_theme(ctx, catppuccin_egui::MOCHA);
+        let mut visuals = ctx.style().visuals.clone();
         visuals.panel_fill = Theme::CANVAS;
         visuals.window_fill = Theme::SURFACE_1;
         visuals.selection.bg_fill = Theme::BORDER_ACTIVE;
