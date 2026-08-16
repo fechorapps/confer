@@ -17,14 +17,14 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
     );
 
     // Responsive container calculation
-    let max_content_w = 1220.0_f32;
+    let max_content_w = 1240.0_f32;
     let content_w = (avail_w - 48.0).clamp(320.0, max_content_w);
     let side_margin = ((avail_w - content_w) / 2.0).max(16.0);
-    let is_compact = avail_w < 940.0;
+    let is_compact = avail_w < 960.0;
 
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.vertical_centered(|ui| {
-            ui.add_space(18.0);
+            ui.add_space(20.0);
 
             // ==========================================
             // TOP GLOBAL BRAND & STATUS HEADER
@@ -40,11 +40,11 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
                         .rounding(Theme::RADIUS_MD)
                         .inner_margin(egui::Margin::symmetric(8.0, 4.0))
                         .show(ui, |ui| {
-                            ui.label(RichText::new("⚡").size(13.0).color(Color32::WHITE));
+                            ui.label(RichText::new("⚡").size(14.0).color(Color32::WHITE));
                         });
-                    ui.add_space(6.0);
-                    ui.label(RichText::new("CONFER").size(19.0).strong().color(Theme::TEXT_PRIMARY));
-                    ui.label(RichText::new("PRO STUDIO").size(10.0).strong().color(Theme::PRIMARY_LIGHT));
+                    ui.add_space(8.0);
+                    ui.label(RichText::new("CONFER").size(20.0).strong().color(Theme::TEXT_PRIMARY));
+                    ui.label(RichText::new("STUDIO").size(10.5).strong().color(Theme::PRIMARY_LIGHT));
                 });
 
                 // Right Status Hub
@@ -56,37 +56,37 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
                         .fill(Theme::SURFACE_1)
                         .stroke(Stroke::new(1.0_f32, Theme::BORDER_SUBTLE))
                         .rounding(Theme::RADIUS_PILL)
-                        .inner_margin(egui::Margin::symmetric(12.0, 5.0))
+                        .inner_margin(egui::Margin::symmetric(12.0, 6.0))
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
                                 let initial = app.user_display_name.chars().next().unwrap_or('U').to_uppercase().to_string();
                                 Components::avatar_badge(ui, &initial, 20.0, 10.0, Theme::PRIMARY);
-                                ui.label(RichText::new(&app.user_display_name).size(11.5).strong().color(Theme::TEXT_PRIMARY));
+                                ui.label(RichText::new(&app.user_display_name).size(12.0).strong().color(Theme::TEXT_PRIMARY));
                                 ui.label(RichText::new("•").size(9.0).color(Theme::TEXT_MUTED));
                                 ui.label(RichText::new(&app.user_email).size(11.0).color(Theme::TEXT_SECONDARY));
                             });
                         });
 
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
 
                     // Server Health Status Pill
                     egui::Frame::group(ui.style())
                         .fill(Theme::SURFACE_1)
                         .stroke(Stroke::new(1.0_f32, Theme::BORDER_SUBTLE))
                         .rounding(Theme::RADIUS_PILL)
-                        .inner_margin(egui::Margin::symmetric(10.0, 5.0))
+                        .inner_margin(egui::Margin::symmetric(12.0, 6.0))
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
                                 ui.label(RichText::new("●").size(8.0).color(Theme::EMERALD));
-                                ui.label(RichText::new("SFU WebRTC Online").size(11.0).strong().color(Color32::from_rgb(203, 213, 225)));
+                                ui.label(RichText::new("WebRTC SFU Ready").size(11.0).strong().color(Color32::from_rgb(226, 232, 240)));
                                 ui.label(RichText::new("•").size(9.0).color(Theme::TEXT_MUTED));
-                                ui.label(RichText::new("<40MB Native").size(10.0).color(Theme::TEXT_SECONDARY));
+                                ui.label(RichText::new("<40MB Native").size(10.5).color(Theme::TEXT_SECONDARY));
                             });
                         });
                 });
             });
 
-            ui.add_space(18.0);
+            ui.add_space(20.0);
 
             // ==========================================
             // RESPONSIVE COCKPIT CONTENT
@@ -98,27 +98,29 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
                     // --- COMPACT VIEW (VERTICAL STACK) ---
                     ui.vertical(|ui| {
                         ui.set_width(content_w);
-                        render_viewfinder_column(app, ui, content_w);
-                        ui.add_space(20.0);
+                        render_studio_viewfinder_card(app, ui, content_w);
+                        ui.add_space(16.0);
                         render_meeting_cards_column(app, ui, content_w);
                     });
                 } else {
-                    // --- WIDESCREEN VIEW (2 BALANCED COLUMNS) ---
-                    let col_left_w = (content_w - 24.0) * 0.54;
-                    let col_right_w = (content_w - 24.0) * 0.46;
+                    // --- EXPANDED VIEW (2-COLUMN GRID) ---
+                    let left_col_w = (content_w * 0.54).max(380.0);
+                    let right_col_w = (content_w - left_col_w - 24.0).max(340.0);
 
                     ui.vertical(|ui| {
-                        ui.set_width(col_left_w);
-                        render_viewfinder_column(app, ui, col_left_w);
+                        ui.set_width(left_col_w);
+                        render_studio_viewfinder_card(app, ui, left_col_w);
                     });
 
                     ui.add_space(24.0);
 
                     ui.vertical(|ui| {
-                        ui.set_width(col_right_w);
-                        render_meeting_cards_column(app, ui, col_right_w);
+                        ui.set_width(right_col_w);
+                        render_meeting_cards_column(app, ui, right_col_w);
                     });
                 }
+
+                ui.add_space(side_margin);
             });
 
             ui.add_space(32.0);
@@ -126,30 +128,31 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
     });
 }
 
-/// Renders the Viewfinder, Hardware Toggles, Audio VU Meter, and Video Tone/Background Selectors
-fn render_viewfinder_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
-    Theme::card_frame(ui.style()).show(ui, |ui| {
-        let card_inner_w = (col_w - 40.0).max(100.0);
+/// Renders the Left Column Studio Monitor & Device Controls
+fn render_studio_viewfinder_card(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
+    let card_inner_w = (col_w - 40.0).max(100.0);
 
-        // Stage Header
+    Theme::card_frame(ui.style()).show(ui, |ui| {
+        // Header
         ui.horizontal(|ui| {
             ui.label(RichText::new("Studio Viewfinder").size(15.0).strong().color(Theme::TEXT_PRIMARY));
+
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let status_text = if app.is_camera_off {
-                    "● Camera Inactive"
+                    "📷 Video Paused"
                 } else {
                     "● 720p HD • 30 FPS"
                 };
                 let status_color = if app.is_camera_off {
-                    Theme::TEXT_SECONDARY
+                    Theme::TEXT_MUTED
                 } else {
                     Theme::EMERALD
                 };
                 egui::Frame::group(ui.style())
                     .fill(Theme::CANVAS)
                     .stroke(Stroke::new(1.0_f32, Theme::BORDER_SUBTLE))
-                    .rounding(Theme::RADIUS_LG)
-                    .inner_margin(egui::Margin::symmetric(8.0, 3.0))
+                    .rounding(Theme::RADIUS_PILL)
+                    .inner_margin(egui::Margin::symmetric(10.0, 4.0))
                     .show(ui, |ui| {
                         ui.label(RichText::new(status_text).size(10.5).strong().color(status_color));
                     });
@@ -158,13 +161,13 @@ fn render_viewfinder_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
 
         ui.add_space(12.0);
 
-        // 16:9 Video Canvas Surface
-        let viewport_h = (card_inner_w * 0.5625).max(120.0);
+        // 16:9 Video Canvas Surface with Studio Lens Reticle
+        let viewport_h = (card_inner_w * 0.5625).max(140.0);
 
         egui::Frame::group(ui.style())
             .fill(Theme::CANVAS)
-            .stroke(Stroke::new(1.5_f32, Theme::SURFACE_2))
-            .rounding(Theme::RADIUS_LG)
+            .stroke(Stroke::new(1.5_f32, Theme::SURFACE_3))
+            .rounding(Theme::RADIUS_MD)
             .inner_margin(0.0)
             .show(ui, |ui| {
                 ui.set_width(card_inner_w);
@@ -173,7 +176,7 @@ fn render_viewfinder_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
                 if !app.is_camera_off {
                     if let Some(tex) = &app.local_video_texture {
                         ui.centered_and_justified(|ui| {
-                            ui.add(egui::Image::new(tex).fit_to_exact_size(Vec2::new(card_inner_w, viewport_h)).rounding(Theme::RADIUS_LG));
+                            ui.add(egui::Image::new(tex).fit_to_exact_size(Vec2::new(card_inner_w, viewport_h)).rounding(Theme::RADIUS_MD));
                         });
                     }
                 } else {
@@ -195,30 +198,30 @@ fn render_viewfinder_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
 
             // Camera Toggle
             let cam_bg = if app.is_camera_off { Theme::CRIMSON } else { Theme::SURFACE_2 };
-            let cam_text = if app.is_camera_off { "Camera Off" } else { "Camera On" };
+            let cam_text = if app.is_camera_off { "📷 Cam Off" } else { "🎥 Cam Active" };
             if ui.add_sized(
                 Vec2::new(btn_w, 34.0),
-                egui::Button::new(RichText::new(cam_text).size(11.5).strong().color(Color32::WHITE)).fill(cam_bg).rounding(Theme::RADIUS_MD),
+                egui::Button::new(RichText::new(cam_text).size(11.5).strong().color(Color32::WHITE)).fill(cam_bg).rounding(Theme::RADIUS_SM),
             ).on_hover_text("Toggle Camera (Ctrl+E)").clicked() {
                 app.toggle_camera();
             }
 
             // Mic Toggle
             let mic_bg = if app.is_mic_muted { Theme::CRIMSON } else { Theme::SURFACE_2 };
-            let mic_text = if app.is_mic_muted { "Mic Muted" } else { "Mic Active" };
+            let mic_text = if app.is_mic_muted { "🔇 Mic Muted" } else { "🎙 Mic Active" };
             if ui.add_sized(
                 Vec2::new(btn_w, 34.0),
-                egui::Button::new(RichText::new(mic_text).size(11.5).strong().color(Color32::WHITE)).fill(mic_bg).rounding(Theme::RADIUS_MD),
+                egui::Button::new(RichText::new(mic_text).size(11.5).strong().color(Color32::WHITE)).fill(mic_bg).rounding(Theme::RADIUS_SM),
             ).on_hover_text("Toggle Microphone (Ctrl+D)").clicked() {
                 app.toggle_mic();
             }
 
             // AI Denoise Toggle
             let denoise_bg = if app.is_ai_denoise_enabled { Theme::PRIMARY } else { Theme::SURFACE_2 };
-            let denoise_text = if app.is_ai_denoise_enabled { "AI Denoise ON" } else { "AI Denoise OFF" };
+            let denoise_text = if app.is_ai_denoise_enabled { "⚡ AI Denoise ON" } else { "⚡ AI Denoise OFF" };
             if ui.add_sized(
                 Vec2::new(btn_w, 34.0),
-                egui::Button::new(RichText::new(denoise_text).size(11.5).strong().color(Color32::WHITE)).fill(denoise_bg).rounding(Theme::RADIUS_MD),
+                egui::Button::new(RichText::new(denoise_text).size(11.5).strong().color(Color32::WHITE)).fill(denoise_bg).rounding(Theme::RADIUS_SM),
             ).on_hover_text("RNNoise 48kHz Neural Noise Suppression").clicked() {
                 app.toggle_ai_denoise();
             }
@@ -242,7 +245,7 @@ fn render_viewfinder_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
                 let seg_color = if !is_lit {
                     Theme::SURFACE_2
                 } else if i > 16 {
-                    Color32::from_rgb(244, 63, 94) // Red Peak
+                    Theme::CRIMSON // Red Peak
                 } else if i > 12 {
                     Theme::AMBER // Amber High
                 } else {
@@ -266,7 +269,7 @@ fn render_viewfinder_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
                     let is_active = app.active_filter == *filter;
                     let bg = if is_active { Theme::PRIMARY } else { Theme::SURFACE_2 };
                     let text_color = if is_active { Color32::WHITE } else { Color32::from_rgb(203, 213, 225) };
-                    if ui.add(egui::Button::new(RichText::new(filter.label()).size(11.0).strong().color(text_color)).fill(bg).rounding(Theme::RADIUS_LG)).clicked() {
+                    if ui.add(egui::Button::new(RichText::new(filter.label()).size(11.0).strong().color(text_color)).fill(bg).rounding(Theme::RADIUS_PILL)).clicked() {
                         app.active_filter = *filter;
                     }
                 }
@@ -284,14 +287,14 @@ fn render_viewfinder_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
                     let is_active = app.virtual_bg_mode == *bg;
                     let btn_bg = if is_active { Theme::PRIMARY } else { Theme::SURFACE_2 };
                     let text_color = if is_active { Color32::WHITE } else { Color32::from_rgb(203, 213, 225) };
-                    if ui.add(egui::Button::new(RichText::new(bg.label()).size(11.0).strong().color(text_color)).fill(btn_bg).rounding(Theme::RADIUS_LG)).clicked() {
+                    if ui.add(egui::Button::new(RichText::new(bg.label()).size(11.0).strong().color(text_color)).fill(btn_bg).rounding(Theme::RADIUS_PILL)).clicked() {
                         app.set_virtual_bg_mode(bg.clone());
                     }
                 }
 
                 let is_custom = matches!(app.virtual_bg_mode, VirtualBackgroundMode::CustomImage(_));
                 let custom_bg = if is_custom { Theme::PRIMARY } else { Theme::SURFACE_2 };
-                if ui.add(egui::Button::new(RichText::new("Custom Photo...").size(11.0).strong().color(Color32::WHITE)).fill(custom_bg).rounding(Theme::RADIUS_LG)).clicked() {
+                if ui.add(egui::Button::new(RichText::new("📁 Custom Photo...").size(11.0).strong().color(Color32::WHITE)).fill(custom_bg).rounding(Theme::RADIUS_PILL)).clicked() {
                     app.choose_custom_background();
                 }
             });
@@ -319,7 +322,7 @@ fn render_meeting_cards_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
                 Vec2::new(chip_w, 30.0),
                 egui::Button::new(RichText::new("Host (Dev)").size(11.0).strong().color(if is_host { Color32::WHITE } else { Color32::from_rgb(203, 213, 225) }))
                     .fill(if is_host { Theme::PRIMARY } else { Theme::SURFACE_2 })
-                    .rounding(Theme::RADIUS_MD),
+                    .rounding(Theme::RADIUS_SM),
             ).clicked() {
                 app.user_email = "host@confer.local".to_string();
                 app.user_display_name = "Host User (Dev)".to_string();
@@ -330,7 +333,7 @@ fn render_meeting_cards_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
                 Vec2::new(chip_w, 30.0),
                 egui::Button::new(RichText::new("Alice (Guest)").size(11.0).strong().color(if is_alice { Color32::WHITE } else { Color32::from_rgb(203, 213, 225) }))
                     .fill(if is_alice { Theme::PRIMARY } else { Theme::SURFACE_2 })
-                    .rounding(Theme::RADIUS_MD),
+                    .rounding(Theme::RADIUS_SM),
             ).clicked() {
                 app.user_email = "participant1@confer.local".to_string();
                 app.user_display_name = "Alice (Dev)".to_string();
@@ -341,7 +344,7 @@ fn render_meeting_cards_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
                 Vec2::new(chip_w, 30.0),
                 egui::Button::new(RichText::new("Bob (Guest)").size(11.0).strong().color(if is_bob { Color32::WHITE } else { Color32::from_rgb(203, 213, 225) }))
                     .fill(if is_bob { Theme::PRIMARY } else { Theme::SURFACE_2 })
-                    .rounding(Theme::RADIUS_MD),
+                    .rounding(Theme::RADIUS_SM),
             ).clicked() {
                 app.user_email = "participant2@confer.local".to_string();
                 app.user_display_name = "Bob (Dev)".to_string();
@@ -372,7 +375,7 @@ fn render_meeting_cards_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
                 egui::Frame::group(ui.style())
                     .fill(Color32::from_rgb(12, 74, 110))
                     .stroke(Stroke::NONE)
-                    .rounding(10.0)
+                    .rounding(Theme::RADIUS_PILL)
                     .inner_margin(egui::Margin::symmetric(8.0, 2.0))
                     .show(ui, |ui| {
                         ui.label(RichText::new("HOST").size(9.5).strong().color(Theme::PRIMARY_LIGHT));
@@ -414,16 +417,16 @@ fn render_meeting_cards_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
         ui.label(RichText::new("Enter the 6-character room code provided by the meeting host:").size(11.5).color(Theme::TEXT_SECONDARY));
         ui.add_space(10.0);
 
-        // Responsive Join Code Row (No horizontal clipping)
+        // Responsive Join Code Row
         ui.horizontal(|ui| {
-            let btn_w = 100.0_f32;
+            let btn_w = 110.0_f32;
             let input_w = (card_inner_w - btn_w - 10.0).max(80.0);
 
             let edit_res = ui.add_sized(
                 Vec2::new(input_w, 36.0),
                 egui::TextEdit::singleline(&mut app.join_code_input)
-                    .hint_text("CODE (e.g. ABC123)")
-                    .font(egui::FontId::monospace(13.5))
+                    .hint_text("PIN (e.g. ABC123)")
+                    .font(egui::FontId::monospace(14.0))
                     .margin(egui::Margin::symmetric(10.0, 6.0)),
             );
             app.join_code_input = app.join_code_input.to_uppercase();
@@ -436,7 +439,7 @@ fn render_meeting_cards_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
                 Vec2::new(btn_w, 36.0),
                 egui::Button::new(RichText::new("Join Room").size(12.5).strong().color(join_text_color))
                     .fill(join_bg)
-                    .rounding(Theme::RADIUS_MD),
+                    .rounding(Theme::RADIUS_SM),
             ).clicked() || (edit_res.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))) && can_join {
                 app.trigger_join_meeting();
             }

@@ -695,21 +695,21 @@ pub struct TileProps<'a> {
 
 fn render_single_tile(ui: &mut Ui, props: &TileProps<'_>) {
     let stroke = if props.is_active_speaker {
-        Stroke::new(2.5_f32, Color32::from_rgb(16, 185, 129)) // Emerald active speaker ring
+        Stroke::new(2.5_f32, crate::ui::theme::Theme::EMERALD) // Emerald active speaker ring
     } else {
-        Stroke::new(1.0_f32, Color32::from_rgb(34, 38, 44))
+        Stroke::new(1.0_f32, crate::ui::theme::Theme::BORDER_SUBTLE)
     };
 
     let bg_color = if props.is_video_muted {
-        Color32::from_rgb(18, 20, 24)
+        crate::ui::theme::Theme::SURFACE_1
     } else {
-        Color32::from_rgb(11, 12, 14)
+        crate::ui::theme::Theme::CANVAS
     };
 
     egui::Frame::group(ui.style())
         .fill(bg_color)
         .stroke(stroke)
-        .rounding(14.0)
+        .rounding(crate::ui::theme::Theme::RADIUS_LG)
         .inner_margin(0.0)
         .show(ui, |ui| {
             ui.set_width(props.width);
@@ -815,17 +815,17 @@ fn render_single_tile(ui: &mut Ui, props: &TileProps<'_>) {
                 ui.horizontal(|ui| {
                     ui.add_space(8.0);
                     egui::Frame::group(ui.style())
-                        .fill(Color32::from_rgba_premultiplied(11, 12, 14, 230))
-                        .stroke(Stroke::new(1.0_f32, Color32::from_rgb(34, 38, 44)))
-                        .rounding(8.0)
+                        .fill(crate::ui::theme::Theme::SURFACE_DOCK)
+                        .stroke(Stroke::new(1.0_f32, crate::ui::theme::Theme::BORDER_SUBTLE))
+                        .rounding(crate::ui::theme::Theme::RADIUS_SM)
                         .inner_margin(egui::Margin::symmetric(8.0, 4.0))
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
                                 let mic_icon = if props.is_audio_muted { "🔇" } else { "🎙" };
                                 let mic_color = if props.is_audio_muted {
-                                    Color32::from_rgb(225, 29, 72)
+                                    crate::ui::theme::Theme::CRIMSON
                                 } else {
-                                    Color32::from_rgb(16, 185, 129)
+                                    crate::ui::theme::Theme::EMERALD
                                 };
                                 ui.label(RichText::new(mic_icon).size(11.0).color(mic_color));
 
@@ -838,7 +838,7 @@ fn render_single_tile(ui: &mut Ui, props: &TileProps<'_>) {
                                     RichText::new(name_label)
                                         .size(11.5)
                                         .strong()
-                                        .color(Color32::from_rgb(248, 250, 252)),
+                                        .color(crate::ui::theme::Theme::TEXT_PRIMARY),
                                 );
 
                                 if props.role == "host" {
@@ -846,7 +846,7 @@ fn render_single_tile(ui: &mut Ui, props: &TileProps<'_>) {
                                         RichText::new("HOST")
                                             .size(9.0)
                                             .strong()
-                                            .color(Color32::from_rgb(56, 189, 248)),
+                                            .color(crate::ui::theme::Theme::PRIMARY_LIGHT),
                                     );
                                 }
                             });
