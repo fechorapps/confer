@@ -67,12 +67,15 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          components: clippy
+          components: clippy, rustfmt
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: client-desktop
+
+      - name: Cargo Format Check
+        run: cargo fmt --manifest-path client-desktop/Cargo.toml --check
 
       - name: Cargo Typecheck
         run: cargo check --manifest-path client-desktop/Cargo.toml --target ${{ matrix.target }}
