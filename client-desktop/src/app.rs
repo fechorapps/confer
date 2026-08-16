@@ -21,6 +21,7 @@ use crate::sdk::protocol::{
 
 use crate::ui::whiteboard::{WhiteboardTool, WHITEBOARD_COLORS};
 use crate::ui::{lobby, meeting_room, waiting_lobby};
+use crate::ui::theme::Theme;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ViewState {
@@ -1331,9 +1332,9 @@ impl eframe::App for ConferApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Dark theme matching Confer design system (Obsidian & Deep Zinc)
         let mut visuals = Visuals::dark();
-        visuals.panel_fill = Color32::from_rgb(11, 12, 14);
-        visuals.window_fill = Color32::from_rgb(18, 20, 23);
-        visuals.selection.bg_fill = Color32::from_rgb(2, 132, 199);
+        visuals.panel_fill = Theme::CANVAS;
+        visuals.window_fill = Theme::SURFACE_1;
+        visuals.selection.bg_fill = Theme::BORDER_ACTIVE;
         ctx.set_visuals(visuals);
 
         self.poll_connect_result();
