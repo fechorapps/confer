@@ -131,51 +131,42 @@ fn render_waiting_participant_row(
                             .color(Theme::TEXT_PRIMARY),
                     );
                     if let Some(email) = &p.email {
-                        ui.label(
-                            RichText::new(email)
-                                .size(9.5)
-                                .color(Theme::TEXT_SECONDARY),
-                        );
+                        ui.label(RichText::new(email).size(9.5).color(Theme::TEXT_SECONDARY));
                     }
                 });
 
-                ui.with_layout(
-                    egui::Layout::right_to_left(egui::Align::Center),
-                    |ui| {
-                        if ui
-                            .add(
-                                egui::Button::new(
-                                    RichText::new("✕")
-                                        .size(10.0)
-                                        .color(Theme::CRIMSON_LIGHT),
-                                )
-                                .fill(Color32::from_rgb(45, 15, 20))
-                                .rounding(Theme::RADIUS_SM),
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                RichText::new("✕").size(10.0).color(Theme::CRIMSON_LIGHT),
                             )
-                            .on_hover_text("Reject / Remove from waiting room")
-                            .clicked()
-                        {
-                            action = Some(WaitingRowAction::Reject);
-                        }
+                            .fill(Color32::from_rgb(45, 15, 20))
+                            .rounding(Theme::RADIUS_SM),
+                        )
+                        .on_hover_text("Reject / Remove from waiting room")
+                        .clicked()
+                    {
+                        action = Some(WaitingRowAction::Reject);
+                    }
 
-                        if ui
-                            .add(
-                                egui::Button::new(
-                                    RichText::new("✓ Admit")
-                                        .size(10.0)
-                                        .strong()
-                                        .color(Color32::WHITE),
-                                )
-                                .fill(Theme::EMERALD)
-                                .rounding(Theme::RADIUS_SM),
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                RichText::new("✓ Admit")
+                                    .size(10.0)
+                                    .strong()
+                                    .color(Color32::WHITE),
                             )
-                            .on_hover_text("Admit to meeting room")
-                            .clicked()
-                        {
-                            action = Some(WaitingRowAction::Admit);
-                        }
-                    },
-                );
+                            .fill(Theme::EMERALD)
+                            .rounding(Theme::RADIUS_SM),
+                        )
+                        .on_hover_text("Admit to meeting room")
+                        .clicked()
+                    {
+                        action = Some(WaitingRowAction::Admit);
+                    }
+                });
             });
         });
     ui.add_space(4.0);

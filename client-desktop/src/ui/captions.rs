@@ -1,6 +1,6 @@
 use crate::app::ConferApp;
-use crate::ui::theme::Theme;
 use crate::sdk::protocol::CaptionChunkDto;
+use crate::ui::theme::Theme;
 use egui::{Color32, Pos2, Rect, RichText, Stroke, Ui};
 
 /// Auto-fade duration in seconds for live caption bubbles (10s for high readability)
@@ -29,9 +29,9 @@ pub fn get_speaker_color(name: &str) -> Color32 {
         .bytes()
         .fold(0u32, |acc, b| acc.wrapping_add(b as u32).wrapping_mul(31));
     match hash % 6 {
-        0 => Theme::PRIMARY_LIGHT,  // Sky Blue
-        1 => Theme::EMERALD_LIGHT,  // Emerald
-        2 => Theme::AMBER_LIGHT,  // Amber
+        0 => Theme::PRIMARY_LIGHT,             // Sky Blue
+        1 => Theme::EMERALD_LIGHT,             // Emerald
+        2 => Theme::AMBER_LIGHT,               // Amber
         3 => Color32::from_rgb(167, 139, 250), // Violet
         4 => Color32::from_rgb(244, 114, 182), // Pink
         _ => Color32::from_rgb(94, 234, 212),  // Teal

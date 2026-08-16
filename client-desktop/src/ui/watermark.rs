@@ -20,7 +20,12 @@ pub fn render_watermark(ui: &mut Ui, rect: Rect, viewer_name: &str, viewer_email
     }
 
     // Low-opacity subtle white/zinc watermark color (anti-leak / DLP compliance)
-    let watermark_color = Color32::from_rgba_premultiplied(Theme::TEXT_PRIMARY.r(), Theme::TEXT_PRIMARY.g(), Theme::TEXT_PRIMARY.b(), 32);
+    let watermark_color = Color32::from_rgba_premultiplied(
+        Theme::TEXT_PRIMARY.r(),
+        Theme::TEXT_PRIMARY.g(),
+        Theme::TEXT_PRIMARY.b(),
+        32,
+    );
     let font_id = FontId::proportional(13.0);
 
     let step_x = 240.0;

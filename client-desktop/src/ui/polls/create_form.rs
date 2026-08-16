@@ -136,22 +136,20 @@ pub(super) fn render_poll_creation_form(app: &mut ConferApp, ui: &mut Ui) {
                 let can_launch =
                     !app.poll_create_question.trim().is_empty() && valid_options.len() >= 2;
 
-                let launch_btn = egui::Button::new(
-                    RichText::new("🚀 Launch Poll")
-                        .size(12.0)
-                        .strong()
-                        .color(if can_launch {
+                let launch_btn =
+                    egui::Button::new(RichText::new("🚀 Launch Poll").size(12.0).strong().color(
+                        if can_launch {
                             Theme::ON_ACCENT
                         } else {
                             Color32::WHITE
-                        }),
-                )
-                .fill(if can_launch {
-                    Theme::BORDER_ACTIVE
-                } else {
-                    Color32::from_rgb(45, 50, 58)
-                })
-                .rounding(6.0);
+                        },
+                    ))
+                    .fill(if can_launch {
+                        Theme::BORDER_ACTIVE
+                    } else {
+                        Color32::from_rgb(45, 50, 58)
+                    })
+                    .rounding(6.0);
 
                 if ui.add_enabled(can_launch, launch_btn).clicked() {
                     app.trigger_create_poll();

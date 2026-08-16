@@ -39,7 +39,11 @@ pub(super) fn render_side_panel_buttons(app: &mut ConferApp, ui: &mut Ui) {
     // People Button with Amber Waiting Room Badge if guests are queued
     let waiting_count = app.waiting_participants.len();
     let roster_text = if waiting_count > 0 {
-        format!("👥 People ({} • {} ⏳)", app.roster.len() + 1, waiting_count)
+        format!(
+            "👥 People ({} • {} ⏳)",
+            app.roster.len() + 1,
+            waiting_count
+        )
     } else {
         format!("👥 People ({})", app.roster.len() + 1)
     };

@@ -116,7 +116,15 @@ pub(super) fn render_single_tile(ui: &mut Ui, props: &TileProps<'_>) {
                 ui.painter().rect_stroke(
                     cell_rect.expand(2.0),
                     crate::ui::theme::Theme::RADIUS_LG + 2.0,
-                    Stroke::new(1.5_f32, Color32::from_rgba_premultiplied(Theme::EMERALD.r(), Theme::EMERALD.g(), Theme::EMERALD.b(), 70)),
+                    Stroke::new(
+                        1.5_f32,
+                        Color32::from_rgba_premultiplied(
+                            Theme::EMERALD.r(),
+                            Theme::EMERALD.g(),
+                            Theme::EMERALD.b(),
+                            70,
+                        ),
+                    ),
                 );
             }
 

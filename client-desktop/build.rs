@@ -7,7 +7,9 @@ fn main() {
     build.compile("vpx_wrapper");
 
     // Link against the system libvpx discovered by pkg-config.
-    let pkg = pkg_config::Config::new().probe("vpx").expect("libvpx not found");
+    let pkg = pkg_config::Config::new()
+        .probe("vpx")
+        .expect("libvpx not found");
     for lib in &pkg.libs {
         println!("cargo:rustc-link-lib={lib}");
     }

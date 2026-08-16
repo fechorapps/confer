@@ -38,20 +38,21 @@ pub(super) fn render_local_participant_row(ui: &mut Ui, app: &ConferApp) {
                         .size(12.0)
                         .color(Theme::TEXT_PRIMARY),
                 );
-                ui.label(RichText::new("(You)").size(10.0).color(Theme::TEXT_SECONDARY));
+                ui.label(
+                    RichText::new("(You)")
+                        .size(10.0)
+                        .color(Theme::TEXT_SECONDARY),
+                );
 
                 if app.my_role == "host" {
-                    ui.with_layout(
-                        egui::Layout::right_to_left(egui::Align::Center),
-                        |ui| {
-                            ui.label(
-                                RichText::new("★ Host")
-                                    .size(10.0)
-                                    .strong()
-                                    .color(Theme::AMBER),
-                            );
-                        },
-                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(
+                            RichText::new("★ Host")
+                                .size(10.0)
+                                .strong()
+                                .color(Theme::AMBER),
+                        );
+                    });
                 }
             });
         });
@@ -97,11 +98,7 @@ pub(super) fn render_participant_row(
                 );
 
                 if p.role == "host" {
-                    ui.label(
-                        RichText::new("★")
-                            .size(10.0)
-                            .color(Theme::AMBER),
-                    );
+                    ui.label(RichText::new("★").size(10.0).color(Theme::AMBER));
                 }
 
                 if p.is_audio_muted {
@@ -113,43 +110,36 @@ pub(super) fn render_participant_row(
 
                 // Host moderation actions
                 if is_host {
-                    ui.with_layout(
-                        egui::Layout::right_to_left(egui::Align::Center),
-                        |ui| {
-                            if ui
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    RichText::new("Kick").size(9.5).color(Theme::CRIMSON_LIGHT),
+                                )
+                                .fill(Color32::from_rgb(45, 15, 20))
+                                .rounding(Theme::RADIUS_SM),
+                            )
+                            .on_hover_text("Remove participant from call")
+                            .clicked()
+                        {
+                            actions.kick = Some((p.user_id, p.display_name.clone()));
+                        }
+
+                        if !p.is_audio_muted
+                            && ui
                                 .add(
                                     egui::Button::new(
-                                        RichText::new("Kick")
-                                            .size(9.5)
-                                            .color(Theme::CRIMSON_LIGHT),
+                                        RichText::new("Mute").size(9.5).color(Theme::TEXT_PRIMARY),
                                     )
-                                    .fill(Color32::from_rgb(45, 15, 20))
+                                    .fill(Theme::SURFACE_3)
                                     .rounding(Theme::RADIUS_SM),
                                 )
-                                .on_hover_text("Remove participant from call")
+                                .on_hover_text("Mute participant's microphone")
                                 .clicked()
-                            {
-                                actions.kick = Some((p.user_id, p.display_name.clone()));
-                            }
-
-                            if !p.is_audio_muted
-                                && ui
-                                    .add(
-                                        egui::Button::new(
-                                            RichText::new("Mute")
-                                                .size(9.5)
-                                                .color(Theme::TEXT_PRIMARY),
-                                        )
-                                        .fill(Theme::SURFACE_3)
-                                        .rounding(Theme::RADIUS_SM),
-                                    )
-                                    .on_hover_text("Mute participant's microphone")
-                                    .clicked()
-                            {
-                                actions.mute = Some(p.user_id);
-                            }
-                        },
-                    );
+                        {
+                            actions.mute = Some(p.user_id);
+                        }
+                    });
                 }
             });
         });

@@ -222,14 +222,13 @@ pub(super) fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                             // Submit Vote Button
                             let can_submit = !selected_set.is_empty();
                             let submit_btn = egui::Button::new(
-                                RichText::new("Submit Vote")
-                                    .size(11.0)
-                                    .strong()
-                                    .color(if can_submit {
+                                RichText::new("Submit Vote").size(11.0).strong().color(
+                                    if can_submit {
                                         Theme::ON_ACCENT
                                     } else {
                                         Color32::WHITE
-                                    }),
+                                    },
+                                ),
                             )
                             .fill(if can_submit {
                                 Theme::BORDER_ACTIVE
@@ -293,8 +292,7 @@ pub(super) fn render_polls_list(app: &mut ConferApp, ui: &mut Ui) {
                                 );
 
                                 // Background track
-                                ui.painter()
-                                    .rect_filled(rect, 4.0, Theme::SURFACE_3);
+                                ui.painter().rect_filled(rect, 4.0, Theme::SURFACE_3);
 
                                 // Filled portion
                                 if pct > 0.0 {

@@ -31,7 +31,10 @@ pub(super) fn render_device_preflight(app: &mut ConferApp, ui: &mut Ui, card_wid
             .add_sized(
                 Vec2::new(btn_w, 32.0),
                 egui::Button::new(
-                    RichText::new(cam_text).size(11.0).strong().color(Theme::ON_ACCENT),
+                    RichText::new(cam_text)
+                        .size(11.0)
+                        .strong()
+                        .color(Theme::ON_ACCENT),
                 )
                 .fill(cam_bg)
                 .rounding(Theme::RADIUS_SM),
@@ -57,7 +60,10 @@ pub(super) fn render_device_preflight(app: &mut ConferApp, ui: &mut Ui, card_wid
             .add_sized(
                 Vec2::new(btn_w, 32.0),
                 egui::Button::new(
-                    RichText::new(mic_text).size(11.0).strong().color(Theme::ON_ACCENT),
+                    RichText::new(mic_text)
+                        .size(11.0)
+                        .strong()
+                        .color(Theme::ON_ACCENT),
                 )
                 .fill(mic_bg)
                 .rounding(Theme::RADIUS_SM),
@@ -107,7 +113,11 @@ pub(super) fn render_device_preflight(app: &mut ConferApp, ui: &mut Ui, card_wid
 pub(super) fn render_mic_vu_meter(app: &ConferApp, ui: &mut Ui, card_width: f32) {
     // Real-Time Live Mic VU Meter Visualizer
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Mic Energy:").size(11.0).color(Theme::TEXT_SECONDARY));
+        ui.label(
+            RichText::new("Mic Energy:")
+                .size(11.0)
+                .color(Theme::TEXT_SECONDARY),
+        );
         let level = if app.is_mic_muted {
             0.0
         } else {
@@ -119,8 +129,7 @@ pub(super) fn render_mic_vu_meter(app: &ConferApp, ui: &mut Ui, card_width: f32)
             ((level * total_segments as f32).round() as usize).min(total_segments);
         let segment_gap = 3.0_f32;
         let available_meter_w = (card_width - 120.0).max(40.0);
-        let segment_w = ((available_meter_w
-            - (total_segments as f32 - 1.0) * segment_gap)
+        let segment_w = ((available_meter_w - (total_segments as f32 - 1.0) * segment_gap)
             / total_segments as f32)
             .max(2.0);
 

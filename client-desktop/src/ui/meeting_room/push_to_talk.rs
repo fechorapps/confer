@@ -13,7 +13,12 @@ pub(super) fn render_push_to_talk_indicator(app: &ConferApp, ui: &mut Ui, full_r
     ui.painter().rect_filled(
         ptt_rect,
         18.0,
-        Color32::from_rgba_premultiplied(Theme::EMERALD.r(), Theme::EMERALD.g(), Theme::EMERALD.b(), 245),
+        Color32::from_rgba_premultiplied(
+            Theme::EMERALD.r(),
+            Theme::EMERALD.g(),
+            Theme::EMERALD.b(),
+            245,
+        ),
     );
     ui.painter().rect_stroke(
         ptt_rect,

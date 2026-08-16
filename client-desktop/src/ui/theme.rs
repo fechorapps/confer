@@ -26,8 +26,8 @@ impl Theme {
     // Semantic Accents
     // -------------------------------------------------------------------------
     pub const PRIMARY: Color32 = catppuccin_egui::MOCHA.blue; // #89B4FA
-    // Catppuccin's palette is flat (no hover variants). Hand-derived by
-    // blending PRIMARY 15% toward MOCHA.crust — see spec §1.
+                                                              // Catppuccin's palette is flat (no hover variants). Hand-derived by
+                                                              // blending PRIMARY 15% toward MOCHA.crust — see spec §1.
     pub const PRIMARY_HOVER: Color32 = Color32::from_rgb(119, 156, 217);
     pub const PRIMARY_LIGHT: Color32 = catppuccin_egui::MOCHA.sapphire; // #74C7EC
 
@@ -35,7 +35,7 @@ impl Theme {
     pub const EMERALD_LIGHT: Color32 = catppuccin_egui::MOCHA.teal; // #94E2D5
 
     pub const CRIMSON: Color32 = catppuccin_egui::MOCHA.red; // #F38BA8
-    // Derived the same way as PRIMARY_HOVER — see note above.
+                                                             // Derived the same way as PRIMARY_HOVER — see note above.
     pub const CRIMSON_HOVER: Color32 = Color32::from_rgb(209, 121, 147);
     pub const CRIMSON_LIGHT: Color32 = catppuccin_egui::MOCHA.flamingo; // #F2CDCD
 

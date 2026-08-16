@@ -19,9 +19,9 @@ use crate::sdk::protocol::{
     WhiteboardStrokeDto,
 };
 
+use crate::ui::theme::Theme;
 use crate::ui::whiteboard::{WhiteboardTool, WHITEBOARD_COLORS};
 use crate::ui::{lobby, meeting_room, waiting_lobby};
-use crate::ui::theme::Theme;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ViewState {

@@ -8,7 +8,11 @@ pub(super) fn render_engagement_cluster(app: &mut ConferApp, ui: &mut Ui, is_com
     } else {
         Theme::SURFACE_2
     };
-    let hand_text = if app.is_hand_raised { "✋ Lower" } else { "✋ Hand" };
+    let hand_text = if app.is_hand_raised {
+        "✋ Lower"
+    } else {
+        "✋ Hand"
+    };
     if ui
         .add_sized(
             Vec2::new(0.0, 32.0),
@@ -29,7 +33,10 @@ pub(super) fn render_engagement_cluster(app: &mut ConferApp, ui: &mut Ui, is_com
 
     // Emoji Reactions Popover (8 High-Fidelity Reactions)
     ui.menu_button(
-        RichText::new("✨ React").size(11.5).strong().color(Color32::WHITE),
+        RichText::new("✨ React")
+            .size(11.5)
+            .strong()
+            .color(Color32::WHITE),
         |ui| {
             ui.horizontal(|ui| {
                 for emoji in ["👍", "❤️", "👏", "🎉", "🚀", "💡", "🔥", "💯"] {
@@ -102,7 +109,11 @@ pub(super) fn render_engagement_cluster(app: &mut ConferApp, ui: &mut Ui, is_com
         } else {
             Theme::SURFACE_2
         };
-        let cc_text = if app.is_captions_enabled { "💬 CC On" } else { "💬 CC" };
+        let cc_text = if app.is_captions_enabled {
+            "💬 CC On"
+        } else {
+            "💬 CC"
+        };
         if ui
             .add_sized(
                 Vec2::new(0.0, 32.0),
@@ -124,30 +135,59 @@ pub(super) fn render_engagement_cluster(app: &mut ConferApp, ui: &mut Ui, is_com
         // Compact Apps Menu
         let has_active_app = app.is_whiteboard_active || app.show_polls || app.is_captions_enabled;
         let apps_text = if has_active_app {
-            RichText::new("⋯ Apps (On) ▾").size(11.5).strong().color(Theme::PRIMARY_LIGHT)
+            RichText::new("⋯ Apps (On) ▾")
+                .size(11.5)
+                .strong()
+                .color(Theme::PRIMARY_LIGHT)
         } else {
-            RichText::new("⋯ Apps ▾").size(11.5).strong().color(Color32::WHITE)
+            RichText::new("⋯ Apps ▾")
+                .size(11.5)
+                .strong()
+                .color(Color32::WHITE)
         };
 
         ui.menu_button(apps_text, |ui| {
             ui.set_min_width(200.0);
-            ui.label(RichText::new("Collaboration Tools").size(11.0).strong().color(Theme::PRIMARY_LIGHT));
+            ui.label(
+                RichText::new("Collaboration Tools")
+                    .size(11.0)
+                    .strong()
+                    .color(Theme::PRIMARY_LIGHT),
+            );
             ui.separator();
 
-            let wb_label = if app.is_whiteboard_active { "✓ 🖌 Whiteboard (Active)" } else { "   🖌 Whiteboard" };
-            if ui.selectable_label(app.is_whiteboard_active, wb_label).clicked() {
+            let wb_label = if app.is_whiteboard_active {
+                "✓ 🖌 Whiteboard (Active)"
+            } else {
+                "   🖌 Whiteboard"
+            };
+            if ui
+                .selectable_label(app.is_whiteboard_active, wb_label)
+                .clicked()
+            {
                 app.toggle_whiteboard();
                 ui.close_menu();
             }
 
-            let polls_label = if app.show_polls { "✓ 📊 Live Polls (Active)" } else { "   📊 Live Polls" };
+            let polls_label = if app.show_polls {
+                "✓ 📊 Live Polls (Active)"
+            } else {
+                "   📊 Live Polls"
+            };
             if ui.selectable_label(app.show_polls, polls_label).clicked() {
                 app.toggle_polls();
                 ui.close_menu();
             }
 
-            let cc_label = if app.is_captions_enabled { "✓ 💬 Closed Captions (On)" } else { "   💬 Closed Captions" };
-            if ui.selectable_label(app.is_captions_enabled, cc_label).clicked() {
+            let cc_label = if app.is_captions_enabled {
+                "✓ 💬 Closed Captions (On)"
+            } else {
+                "   💬 Closed Captions"
+            };
+            if ui
+                .selectable_label(app.is_captions_enabled, cc_label)
+                .clicked()
+            {
                 app.toggle_captions();
                 ui.close_menu();
             }

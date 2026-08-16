@@ -45,7 +45,9 @@ pub(super) fn render_header_bar(app: &mut ConferApp, ui: &mut Ui) {
                     if ui
                         .add(
                             egui::Button::new(
-                                RichText::new("✕ Leave Queue").size(12.0).color(Theme::ON_ACCENT),
+                                RichText::new("✕ Leave Queue")
+                                    .size(12.0)
+                                    .color(Theme::ON_ACCENT),
                             )
                             .fill(Theme::CRIMSON)
                             .rounding(Theme::RADIUS_SM),
@@ -65,9 +67,7 @@ pub(super) fn render_header_bar(app: &mut ConferApp, ui: &mut Ui) {
                             .show(ui, |ui| {
                                 ui.horizontal(|ui| {
                                     ui.label(
-                                        RichText::new("PIN:")
-                                            .size(10.5)
-                                            .color(Theme::TEXT_MUTED),
+                                        RichText::new("PIN:").size(10.5).color(Theme::TEXT_MUTED),
                                     );
                                     ui.label(
                                         RichText::new(code)

@@ -126,7 +126,13 @@ impl Vp8Encoder {
     ///
     /// `fps_num`/`fps_den` is the frame rate fraction (e.g. 30/1).
     /// `deadline_us` is passed straight to libvpx (e.g. `VPX_DL_REALTIME`).
-    pub fn new(width: u32, height: u32, bitrate_kbps: u32, fps_num: u32, fps_den: u32) -> Result<Self> {
+    pub fn new(
+        width: u32,
+        height: u32,
+        bitrate_kbps: u32,
+        fps_num: u32,
+        fps_den: u32,
+    ) -> Result<Self> {
         if width == 0 || height == 0 || fps_num == 0 || fps_den == 0 {
             return Err(VpxError::InvalidInput);
         }

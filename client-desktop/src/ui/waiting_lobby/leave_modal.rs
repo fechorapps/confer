@@ -15,10 +15,8 @@ pub(super) fn render_leave_confirmation_modal(app: &mut ConferApp, ui: &mut Ui, 
 
         let modal_w = 380.0_f32;
         let modal_h = 180.0_f32;
-        let modal_rect = egui::Rect::from_center_size(
-            overlay_rect.center(),
-            Vec2::new(modal_w, modal_h),
-        );
+        let modal_rect =
+            egui::Rect::from_center_size(overlay_rect.center(), Vec2::new(modal_w, modal_h));
 
         ui.allocate_new_ui(egui::UiBuilder::new().max_rect(modal_rect), |ui| {
             egui::Frame::group(ui.style())
@@ -50,7 +48,9 @@ pub(super) fn render_leave_confirmation_modal(app: &mut ConferApp, ui: &mut Ui, 
                                 .add_sized(
                                     Vec2::new(btn_w, 34.0),
                                     egui::Button::new(
-                                        RichText::new("Stay in Queue").size(12.0).color(Theme::TEXT_PRIMARY),
+                                        RichText::new("Stay in Queue")
+                                            .size(12.0)
+                                            .color(Theme::TEXT_PRIMARY),
                                     )
                                     .fill(Theme::SURFACE_2)
                                     .rounding(Theme::RADIUS_SM),

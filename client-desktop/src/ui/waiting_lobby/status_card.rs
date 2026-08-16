@@ -19,7 +19,12 @@ pub(super) fn render_pulse_icon(ui: &mut Ui, card_width: f32) {
         ring_radius + 6.0,
         Stroke::new(
             1.5_f32,
-            Color32::from_rgba_premultiplied(Theme::PRIMARY_LIGHT.r(), Theme::PRIMARY_LIGHT.g(), Theme::PRIMARY_LIGHT.b(), 70),
+            Color32::from_rgba_premultiplied(
+                Theme::PRIMARY_LIGHT.r(),
+                Theme::PRIMARY_LIGHT.g(),
+                Theme::PRIMARY_LIGHT.b(),
+                70,
+            ),
         ),
     );
     // Inner solid primary circle
@@ -29,8 +34,14 @@ pub(super) fn render_pulse_icon(ui: &mut Ui, card_width: f32) {
     let p = ui.painter();
     let icon_col = Theme::ON_ACCENT;
     p.circle_stroke(center, 10.0, Stroke::new(1.5_f32, icon_col));
-    p.line_segment([center, Pos2::new(center.x, center.y - 6.0)], Stroke::new(1.5_f32, icon_col));
-    p.line_segment([center, Pos2::new(center.x + 4.0, center.y)], Stroke::new(1.5_f32, icon_col));
+    p.line_segment(
+        [center, Pos2::new(center.x, center.y - 6.0)],
+        Stroke::new(1.5_f32, icon_col),
+    );
+    p.line_segment(
+        [center, Pos2::new(center.x + 4.0, center.y)],
+        Stroke::new(1.5_f32, icon_col),
+    );
 }
 
 pub(super) fn render_room_status(app: &ConferApp, ui: &mut Ui) {
@@ -117,24 +128,21 @@ pub(super) fn render_identity_strip(app: &ConferApp, ui: &mut Ui) {
                     }
                 });
 
-                ui.with_layout(
-                    egui::Layout::right_to_left(egui::Align::Center),
-                    |ui| {
-                        egui::Frame::group(ui.style())
-                            .fill(Color32::from_rgb(69, 26, 3)) // Deep Amber Fill
-                            .stroke(Stroke::new(1.0_f32, Theme::AMBER))
-                            .rounding(Theme::RADIUS_PILL)
-                            .inner_margin(egui::Margin::symmetric(10.0, 4.0))
-                            .show(ui, |ui| {
-                                ui.label(
-                                    RichText::new("● IN QUEUE")
-                                        .size(11.0)
-                                        .strong()
-                                        .color(Theme::AMBER),
-                                );
-                            });
-                    },
-                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    egui::Frame::group(ui.style())
+                        .fill(Color32::from_rgb(69, 26, 3)) // Deep Amber Fill
+                        .stroke(Stroke::new(1.0_f32, Theme::AMBER))
+                        .rounding(Theme::RADIUS_PILL)
+                        .inner_margin(egui::Margin::symmetric(10.0, 4.0))
+                        .show(ui, |ui| {
+                            ui.label(
+                                RichText::new("● IN QUEUE")
+                                    .size(11.0)
+                                    .strong()
+                                    .color(Theme::AMBER),
+                            );
+                        });
+                });
             });
         });
 }

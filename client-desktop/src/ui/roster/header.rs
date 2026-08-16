@@ -5,7 +5,12 @@ use egui::{Color32, RichText, Ui};
 /// Header bar: title + close (✕) button.
 pub(super) fn render_header_bar(app: &mut ConferApp, ui: &mut Ui) {
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Participants").strong().size(14.0).color(Theme::TEXT_PRIMARY));
+        ui.label(
+            RichText::new("Participants")
+                .strong()
+                .size(14.0)
+                .color(Theme::TEXT_PRIMARY),
+        );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
                 .add(

@@ -40,16 +40,13 @@ pub(super) fn render_host_toolbar(ui: &mut Ui, app: &mut ConferApp) -> bool {
         };
         if ui
             .add(
-                egui::Button::new(
-                    RichText::new(lock_label)
-                        .size(10.5)
-                        .strong()
-                        .color(if app.meeting_policy.is_locked {
-                            Theme::AMBER
-                        } else {
-                            Color32::WHITE
-                        }),
-                )
+                egui::Button::new(RichText::new(lock_label).size(10.5).strong().color(
+                    if app.meeting_policy.is_locked {
+                        Theme::AMBER
+                    } else {
+                        Color32::WHITE
+                    },
+                ))
                 .fill(lock_bg)
                 .rounding(Theme::RADIUS_SM),
             )

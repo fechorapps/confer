@@ -71,7 +71,10 @@ fn render_divider(ui: &mut Ui) {
     let div_x = ui.cursor().min.x;
     let div_cy = ui.available_rect_before_wrap().center().y;
     ui.painter().line_segment(
-        [Pos2::new(div_x, div_cy - 9.0), Pos2::new(div_x, div_cy + 9.0)],
+        [
+            Pos2::new(div_x, div_cy - 9.0),
+            Pos2::new(div_x, div_cy + 9.0),
+        ],
         Stroke::new(1.0_f32, Theme::BORDER_SUBTLE),
     );
     ui.add_space(4.0);

@@ -40,9 +40,8 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
         let (zoom, pan) =
             draw_canvas_background_and_handle_zoom_pan(app, ui, &response, &painter, canvas_rect);
 
-        let to_screen = move |x: f32, y: f32| -> Pos2 {
-            canvas_rect.min + pan + Vec2::new(x * zoom, y * zoom)
-        };
+        let to_screen =
+            move |x: f32, y: f32| -> Pos2 { canvas_rect.min + pan + Vec2::new(x * zoom, y * zoom) };
 
         // --- Handle User Interactions on Canvas ---
         handle_pointer_input(app, &response, canvas_rect, zoom);
@@ -113,8 +112,7 @@ fn render_toolbar(app: &mut ConferApp, ui: &mut Ui) {
                 Stroke::new(1.0_f32, crate::ui::theme::Theme::BORDER_SUBTLE)
             };
 
-            let (rect, resp) =
-                ui.allocate_exact_size(Vec2::new(18.0, 18.0), egui::Sense::click());
+            let (rect, resp) = ui.allocate_exact_size(Vec2::new(18.0, 18.0), egui::Sense::click());
             ui.painter().rect(rect, 4.0, color, stroke);
             if resp.clicked() {
                 app.whiteboard_color = color;
@@ -178,13 +176,9 @@ fn render_toolbar(app: &mut ConferApp, ui: &mut Ui) {
         if app.whiteboard_zoom != 1.0
             && ui
                 .add(
-                    egui::Button::new(
-                        RichText::new("1:1")
-                            .size(10.0)
-                            .color(Theme::TEXT_SECONDARY),
-                    )
-                    .fill(Theme::SURFACE_2)
-                    .rounding(4.0),
+                    egui::Button::new(RichText::new("1:1").size(10.0).color(Theme::TEXT_SECONDARY))
+                        .fill(Theme::SURFACE_2)
+                        .rounding(4.0),
                 )
                 .on_hover_text("Reset Zoom (100%)")
                 .clicked()
@@ -209,11 +203,9 @@ fn render_toolbar(app: &mut ConferApp, ui: &mut Ui) {
         if !app.show_whiteboard_clear_confirmation {
             if ui
                 .add(
-                    egui::Button::new(
-                        RichText::new("🗑 Clear").size(11.0).color(Theme::ON_ACCENT),
-                    )
-                    .fill(crate::ui::theme::Theme::CRIMSON)
-                    .rounding(crate::ui::theme::Theme::RADIUS_SM),
+                    egui::Button::new(RichText::new("🗑 Clear").size(11.0).color(Theme::ON_ACCENT))
+                        .fill(crate::ui::theme::Theme::CRIMSON)
+                        .rounding(crate::ui::theme::Theme::RADIUS_SM),
                 )
                 .on_hover_text("Clear entire whiteboard for all participants")
                 .clicked()
@@ -299,7 +291,9 @@ fn render_text_input_bar(app: &mut ConferApp, ui: &mut Ui) {
             if (ui
                 .add(
                     egui::Button::new(
-                        RichText::new("Place Text").size(11.0).color(Theme::ON_ACCENT),
+                        RichText::new("Place Text")
+                            .size(11.0)
+                            .color(Theme::ON_ACCENT),
                     )
                     .fill(Theme::BORDER_ACTIVE)
                     .rounding(4.0),
@@ -385,8 +379,7 @@ fn handle_pointer_input(app: &mut ConferApp, response: &Response, canvas_rect: R
                         } else {
                             app.whiteboard_current_points.push(rel_pos2);
                         }
-                    } else if response.drag_stopped() && !app.whiteboard_current_points.is_empty()
-                    {
+                    } else if response.drag_stopped() && !app.whiteboard_current_points.is_empty() {
                         let points = if app.whiteboard_current_points.len() == 1 {
                             vec![
                                 [

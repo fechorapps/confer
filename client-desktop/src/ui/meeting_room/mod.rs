@@ -44,11 +44,7 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                             .strong()
                             .color(Theme::TEXT_PRIMARY),
                     );
-                    ui.label(
-                        RichText::new("•")
-                            .size(10.0)
-                            .color(Theme::TEXT_MUTED),
-                    );
+                    ui.label(RichText::new("•").size(10.0).color(Theme::TEXT_MUTED));
                     ui.label(
                         RichText::new(&app.room_title)
                             .size(13.5)
@@ -61,9 +57,7 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                 if let Some(code) = &app.current_join_code {
                     ui.add_space(8.0);
                     let now = ui.input(|i| i.time);
-                    let is_recently_copied = app
-                        .code_copied_time
-                        .is_some_and(|t| now - t < 2.0);
+                    let is_recently_copied = app.code_copied_time.is_some_and(|t| now - t < 2.0);
 
                     let (code_text, code_col) = if is_recently_copied {
                         ("✓ Copied!".to_string(), Theme::EMERALD)
@@ -126,10 +120,7 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                     if ui
                         .add(
                             egui::Button::new(
-                                RichText::new("⚡ HUD")
-                                    .size(11.0)
-                                    .strong()
-                                    .color(hud_fg),
+                                RichText::new("⚡ HUD").size(11.0).strong().color(hud_fg),
                             )
                             .fill(hud_bg)
                             .rounding(crate::ui::theme::Theme::RADIUS_SM),

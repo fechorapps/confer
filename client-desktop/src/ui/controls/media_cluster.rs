@@ -11,7 +11,11 @@ pub(super) fn render_media_cluster(app: &mut ConferApp, ui: &mut Ui) {
         Theme::SURFACE_3
     };
 
-    let level = if app.is_mic_muted { 0.0 } else { app.mic_test_level };
+    let level = if app.is_mic_muted {
+        0.0
+    } else {
+        app.mic_test_level
+    };
     let mic_text = if app.is_push_to_talk_active {
         "🎙 PTT Active"
     } else if app.is_mic_muted {
@@ -129,7 +133,10 @@ pub(super) fn render_media_cluster(app: &mut ConferApp, ui: &mut Ui) {
     } else {
         let mut selected_display: Option<usize> = None;
         ui.menu_button(
-            RichText::new("🖥 Share").size(11.5).strong().color(Color32::WHITE),
+            RichText::new("🖥 Share")
+                .size(11.5)
+                .strong()
+                .color(Color32::WHITE),
             |ui| {
                 ui.set_min_width(220.0);
                 ui.label(
