@@ -8,7 +8,10 @@ use uuid::Uuid;
 
 use crate::media::filters::VideoFilter;
 use crate::media::virtual_background::VirtualBackgroundMode;
-use crate::media::{detect_displays, CameraCapturer, CandidateTarget, DisplayInfo, PickerMode, RtcEngine, RtcEvent, ScreenCapturer};
+use crate::media::{
+    detect_displays, AudioPipeline, CameraCapturer, CandidateTarget, DisplayInfo, PickerMode,
+    RtcEngine, RtcEvent, ScreenCapturer, VideoDecoder, VideoEncoder,
+};
 use crate::sdk::client::ConferClient;
 use crate::sdk::protocol::{
     CaptionChunkDto, ChatMessageDto, ClientMessage, MeetingPolicyDto, ParticipantState, PollDto,
@@ -54,6 +57,10 @@ pub struct ConnectSuccess {
     pub role: String,
     pub client: ConferClient,
     pub rtc_engine: Option<Arc<tokio::sync::Mutex<RtcEngine>>>,
+    pub audio_pipeline: Option<AudioPipeline>,
+    pub video_encoder: Option<VideoEncoder>,
+    pub local_frame_tx: Option<mpsc::Sender<Vec<u8>>>,
+    pub remote_frame_rx: Option<mpsc::UnboundedReceiver<(Uuid, egui::ColorImage)>>,
 }
 
 pub struct ConferApp {
@@ -163,6 +170,16 @@ pub struct ConferApp {
     pub connect_rx: Option<mpsc::UnboundedReceiver<Result<ConnectSuccess, String>>>,
     /// WebRTC engine, created after the signaling connection is established.
     pub rtc_engine: Option<Arc<tokio::sync::Mutex<RtcEngine>>>,
+    /// Real-time microphone capture and remote audio playback pipeline.
+    pub audio_pipeline: Option<AudioPipeline>,
+    /// Real-time VP8 video encoder pipeline (Step 4).
+    pub video_encoder: Option<VideoEncoder>,
+    /// Channel to send raw RGB camera/screen frames to the video encoder.
+    pub local_frame_tx: Option<mpsc::Sender<Vec<u8>>>,
+    /// Decoded remote video frames receiver (Step 5).
+    pub remote_frame_rx: Option<mpsc::UnboundedReceiver<(Uuid, egui::ColorImage)>>,
+    /// Active GPU textures for remote participant video feeds.
+    pub remote_video_textures: HashMap<Uuid, TextureHandle>,
 
     /// Selected cockpit tab in the Pre-Flight Lobby (Host vs Join)
     pub lobby_action_tab: LobbyActionTab,
@@ -275,6 +292,11 @@ impl ConferApp {
             tokio_rt,
             connect_rx: None,
             rtc_engine: None,
+            audio_pipeline: None,
+            video_encoder: None,
+            local_frame_tx: None,
+            remote_frame_rx: None,
+            remote_video_textures: HashMap::new(),
             lobby_action_tab: LobbyActionTab::default(),
         }
     }
@@ -380,6 +402,21 @@ impl ConferApp {
                 let rtc_engine = RtcEngine::new(join.ice_servers, rtc_tx)
                     .await
                     .map_err(|e| format!("Failed to create RTC engine: {e}"))?;
+
+                let audio_track = rtc_engine.audio_track();
+                let audio_pipeline = AudioPipeline::new(audio_track)
+                    .await
+                    .map_err(|e| format!("Failed to create audio pipeline: {e}"))?;
+                let remote_sample_tx = audio_pipeline.remote_sample_tx();
+
+                let video_track = rtc_engine.video_track();
+                let (local_frame_tx, local_frame_rx) = mpsc::channel::<Vec<u8>>(8);
+                let video_encoder =
+                    VideoEncoder::start(320, 180, 30, 500, video_track, local_frame_rx).ok();
+
+                let (remote_frame_tx, remote_frame_rx) =
+                    mpsc::unbounded_channel::<(Uuid, egui::ColorImage)>();
+
                 let rtc_engine = Arc::new(tokio::sync::Mutex::new(rtc_engine));
 
                 rt_handle.spawn(async move {
@@ -403,10 +440,20 @@ impl ConferApp {
                                     tracing::warn!("failed to enqueue local ICE candidate: {e}");
                                 }
                             }
-                            RtcEvent::RemoteTrack { publisher_id, kind, .. } => {
-                                tracing::info!(
-                                    "remote track ready: publisher_id={publisher_id} kind={kind}"
-                                );
+                            RtcEvent::RemoteTrack {
+                                publisher_id,
+                                kind,
+                                track,
+                            } => {
+                                if kind == "audio" {
+                                    AudioPipeline::start_remote_decode(track, remote_sample_tx.clone());
+                                } else if kind == "video" {
+                                    tracing::info!(
+                                        "remote video track ready (step 5): publisher_id={publisher_id}"
+                                    );
+                                    let dec_tx = remote_frame_tx.clone();
+                                    let _ = VideoDecoder::start(track, dec_tx, publisher_id);
+                                }
                             }
                         }
                     }
@@ -420,6 +467,10 @@ impl ConferApp {
                     role: join.role,
                     client: ws_client,
                     rtc_engine: Some(rtc_engine),
+                    audio_pipeline: Some(audio_pipeline),
+                    video_encoder,
+                    local_frame_tx: Some(local_frame_tx),
+                    remote_frame_rx: Some(remote_frame_rx),
                 })
             }
             .await;
@@ -453,6 +504,10 @@ impl ConferApp {
                 self.my_role = success.role;
                 self.client = success.client;
                 self.rtc_engine = success.rtc_engine;
+                self.audio_pipeline = success.audio_pipeline;
+                self.video_encoder = success.video_encoder;
+                self.local_frame_tx = success.local_frame_tx;
+                self.remote_frame_rx = success.remote_frame_rx;
                 self.view_state = ViewState::MeetingRoom;
             }
             Err(message) => {
@@ -463,6 +518,9 @@ impl ConferApp {
 
     pub fn toggle_mic(&mut self) {
         self.is_mic_muted = !self.is_mic_muted;
+        if let Some(pipeline) = &self.audio_pipeline {
+            pipeline.set_muted(self.is_mic_muted);
+        }
         self.client.send_message(ClientMessage::SetMute {
             kind: "audio".to_string(),
             muted: self.is_mic_muted,
@@ -858,8 +916,14 @@ impl ConferApp {
     }
 
     pub fn leave_meeting(&mut self) {
-        // Drop the WebRTC engine so PeerConnections release their sockets. The
-        // on-going RtcEvent task will exit when its receiver closes.
+        // Drop the audio and video pipelines and WebRTC engine so PeerConnections release
+        // their sockets and media streams are stopped. The on-going RtcEvent
+        // task will exit when its receiver closes.
+        self.audio_pipeline = None;
+        self.video_encoder = None;
+        self.local_frame_tx = None;
+        self.remote_frame_rx = None;
+        self.remote_video_textures.clear();
         self.rtc_engine = None;
 
         self.view_state = ViewState::Lobby;
@@ -1160,12 +1224,10 @@ impl ConferApp {
                 ServerMessage::MeetingEnded { .. } => {
                     self.leave_meeting();
                 }
-                ServerMessage::Pong { .. } => {
-                    // TODO: measure real RTT. The SDK reader task
-                    // (sdk/client.rs) sends `Ping` every 5s without exposing
-                    // the send `Instant`, so app.rs cannot compute RTT here.
-                    // Until the SDK surfaces ping timestamps, leave the last
-                    // value untouched instead of reporting a fake constant.
+                ServerMessage::Pong { seq } => {
+                    if let Some(rtt) = self.client.take_rtt_ms(seq) {
+                        self.rtt_ms = rtt;
+                    }
                 }
                 ServerMessage::Error { code, message } => {
                     tracing::warn!("Server error {code}: {message}");
@@ -1188,9 +1250,8 @@ impl ConferApp {
                                 let engine = engine.lock().await;
                                 match engine.apply_subscribe_offer(sdp, mapping).await {
                                     Ok(answer_sdp) => {
-                                        let msg = ClientMessage::SubscribeAnswer {
-                                            sdp: answer_sdp,
-                                        };
+                                        let msg =
+                                            ClientMessage::SubscribeAnswer { sdp: answer_sdp };
                                         if let Err(e) = out_tx.try_send(msg) {
                                             tracing::warn!(
                                                 "failed to enqueue subscribe answer: {e}"
@@ -1211,34 +1272,30 @@ impl ConferApp {
                     sdp_mid,
                     sdp_mline_index,
                     username_fragment,
-                } => {
-                    match CandidateTarget::try_from(target.as_str()) {
-                        Ok(target) => {
-                            if let Some(engine) = self.rtc_engine.clone() {
-                                self.tokio_rt.spawn(async move {
-                                    let engine = engine.lock().await;
-                                    if let Err(e) = engine
-                                        .add_ice_candidate(
-                                            target,
-                                            candidate,
-                                            sdp_mid,
-                                            sdp_mline_index,
-                                            username_fragment,
-                                        )
-                                        .await
-                                    {
-                                        tracing::warn!(
-                                            "failed to add remote ICE candidate: {e}"
-                                        );
-                                    }
-                                });
-                            }
-                        }
-                        Err(e) => {
-                            tracing::warn!("ignoring ICE candidate with invalid target: {e}");
+                } => match CandidateTarget::try_from(target.as_str()) {
+                    Ok(target) => {
+                        if let Some(engine) = self.rtc_engine.clone() {
+                            self.tokio_rt.spawn(async move {
+                                let engine = engine.lock().await;
+                                if let Err(e) = engine
+                                    .add_ice_candidate(
+                                        target,
+                                        candidate,
+                                        sdp_mid,
+                                        sdp_mline_index,
+                                        username_fragment,
+                                    )
+                                    .await
+                                {
+                                    tracing::warn!("failed to add remote ICE candidate: {e}");
+                                }
+                            });
                         }
                     }
-                }
+                    Err(e) => {
+                        tracing::warn!("ignoring ICE candidate with invalid target: {e}");
+                    }
+                },
                 unhandled => {
                     tracing::debug!("Ignoring unimplemented server message: {unhandled:?}");
                 }
@@ -1260,7 +1317,19 @@ impl eframe::App for ConferApp {
         self.poll_incoming_messages();
         self.handle_global_shortcuts(ctx);
 
-        // Update local live camera frame texture with zero redundant GPU uploads
+        // Drain remote decoded video frames (Step 5)
+        if let Some(rx) = &mut self.remote_frame_rx {
+            while let Ok((publisher_id, image)) = rx.try_recv() {
+                let tex = ctx.load_texture(
+                    format!("remote_video_{}", publisher_id),
+                    image,
+                    egui::TextureOptions::LINEAR,
+                );
+                self.remote_video_textures.insert(publisher_id, tex);
+            }
+        }
+
+        // Update local live camera frame texture and publish to WebRTC track (Step 4)
         if !self.is_camera_off {
             self.camera_capturer.set_filter(self.active_filter);
             self.camera_capturer
@@ -1269,6 +1338,19 @@ impl eframe::App for ConferApp {
                 .camera_capturer
                 .get_latest_frame_if_newer(self.last_rendered_frame_id)
             {
+                // If not sharing screen, publish local camera frame to WebRTC track
+                if !self.is_screen_sharing {
+                    if let Some(tx) = &self.local_frame_tx {
+                        let mut rgb = Vec::with_capacity(frame.width() * frame.height() * 3);
+                        for p in &frame.pixels {
+                            rgb.push(p.r());
+                            rgb.push(p.g());
+                            rgb.push(p.b());
+                        }
+                        let _ = tx.try_send(rgb);
+                    }
+                }
+
                 self.local_video_texture = Some(ctx.load_texture(
                     "local_camera_feed",
                     frame,
@@ -1281,7 +1363,7 @@ impl eframe::App for ConferApp {
             self.last_rendered_frame_id = 0;
         }
 
-        // Update real-time screen share texture
+        // Update real-time screen share texture and publish to WebRTC track (Step 4)
         if self.is_screen_sharing {
             if let Some(err) = self.screen_capturer.take_error() {
                 match err {
@@ -1304,6 +1386,24 @@ impl eframe::App for ConferApp {
                 .screen_capturer
                 .get_latest_frame_if_newer(self.last_screen_frame_id)
             {
+                // Publish screen share frame to WebRTC track
+                if let Some(tx) = &self.local_frame_tx {
+                    let img_w = frame.width();
+                    let img_h = frame.height();
+                    let mut rgb = Vec::with_capacity(320 * 180 * 3);
+                    for y in 0..180 {
+                        let src_y = (y * img_h) / 180;
+                        for x in 0..320 {
+                            let src_x = (x * img_w) / 320;
+                            let p = frame.pixels[src_y * img_w + src_x];
+                            rgb.push(p.r());
+                            rgb.push(p.g());
+                            rgb.push(p.b());
+                        }
+                    }
+                    let _ = tx.try_send(rgb);
+                }
+
                 self.screen_share_texture = Some(ctx.load_texture(
                     "screen_share_feed",
                     frame,

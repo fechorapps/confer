@@ -16,15 +16,19 @@ use uuid::Uuid;
 use crate::sdk::client::IceServerConfig;
 use crate::sdk::protocol::{TrackIntent, TrackMapping};
 
+use rtc::media_stream::MediaStreamTrack;
 use rtc::peer_connection::configuration::media_engine::MediaEngine;
-use rtc::rtp_transceiver::rtp_sender::{RtpCodecKind, RTCRtpEncodingParameters};
+use rtc::rtp_transceiver::rtp_sender::{
+    RTCRtpCodec, RTCRtpCodingParameters, RTCRtpEncodingParameters, RtpCodecKind,
+};
 use webrtc::error::Error as WebRtcError;
+use webrtc::media_stream::track_local::static_sample::TrackLocalStaticSample;
+use webrtc::media_stream::track_local::TrackLocal;
 use webrtc::media_stream::track_remote::TrackRemote;
 use webrtc::peer_connection::{
     PeerConnection, PeerConnectionBuilder, PeerConnectionEventHandler, RTCConfigurationBuilder,
     RTCIceCandidateInit, RTCIceServer, RTCPeerConnectionIceEvent, RTCSessionDescription,
 };
-use webrtc::rtp_transceiver::{RTCRtpTransceiverDirection, RTCRtpTransceiverInit};
 
 /// Events produced by the WebRTC engine that must be handled by the application.
 pub enum RtcEvent {
@@ -61,7 +65,9 @@ impl fmt::Debug for RtcEvent {
                 .field("sdp_mline_index", sdp_mline_index)
                 .field("username_fragment", username_fragment)
                 .finish(),
-            RtcEvent::RemoteTrack { publisher_id, kind, .. } => f
+            RtcEvent::RemoteTrack {
+                publisher_id, kind, ..
+            } => f
                 .debug_struct("RemoteTrack")
                 .field("publisher_id", publisher_id)
                 .field("kind", kind)
@@ -167,9 +173,7 @@ impl PeerConnectionEventHandler for RtcPeerHandler {
         let publisher_id = {
             let mut mapping = self.subscribe_mapping.lock().await;
             if mapping.is_empty() {
-                tracing::warn!(
-                    "remote track arrived but subscribe offer mapping is exhausted"
-                );
+                tracing::warn!("remote track arrived but subscribe offer mapping is exhausted");
                 Uuid::nil()
             } else {
                 mapping.remove(0).publisher_id
@@ -199,6 +203,10 @@ pub struct RtcEngine {
     /// Candidates received before the remote description was set.
     pending_publish_candidates: Arc<Mutex<Vec<RTCIceCandidateInit>>>,
     pending_subscribe_candidates: Arc<Mutex<Vec<RTCIceCandidateInit>>>,
+    /// Local microphone audio track (Step 3).
+    audio_track: Arc<TrackLocalStaticSample>,
+    /// Local camera/screen video track (Step 4).
+    video_track: Arc<TrackLocalStaticSample>,
 }
 
 impl RtcEngine {
@@ -274,6 +282,54 @@ impl RtcEngine {
                 .await?,
         );
 
+        let audio_track = Arc::new(TrackLocalStaticSample::new(MediaStreamTrack::new(
+            "confer-audio".into(),
+            "cam-audio".into(),
+            "Microphone".into(),
+            RtpCodecKind::Audio,
+            vec![RTCRtpEncodingParameters {
+                rtp_coding_parameters: RTCRtpCodingParameters {
+                    ssrc: Some(1111111111),
+                    ..Default::default()
+                },
+                codec: RTCRtpCodec {
+                    mime_type: "audio/opus".into(),
+                    clock_rate: 48000,
+                    channels: 2,
+                    sdp_fmtp_line: "".into(),
+                    rtcp_feedback: vec![],
+                },
+                ..Default::default()
+            }],
+        ))?);
+        publish_pc
+            .add_track(audio_track.clone() as Arc<dyn TrackLocal>)
+            .await?;
+
+        let video_track = Arc::new(TrackLocalStaticSample::new(MediaStreamTrack::new(
+            "confer-video".into(),
+            "cam-video".into(),
+            "Camera".into(),
+            RtpCodecKind::Video,
+            vec![RTCRtpEncodingParameters {
+                rtp_coding_parameters: RTCRtpCodingParameters {
+                    ssrc: Some(2222222222),
+                    ..Default::default()
+                },
+                codec: RTCRtpCodec {
+                    mime_type: "video/VP8".into(),
+                    clock_rate: 90000,
+                    channels: 0,
+                    sdp_fmtp_line: "".into(),
+                    rtcp_feedback: vec![],
+                },
+                ..Default::default()
+            }],
+        ))?);
+        publish_pc
+            .add_track(video_track.clone() as Arc<dyn TrackLocal>)
+            .await?;
+
         Ok(Self {
             publish_pc,
             subscribe_pc,
@@ -282,6 +338,8 @@ impl RtcEngine {
             subscribe_answer_lock: Arc::new(Mutex::new(())),
             pending_publish_candidates,
             pending_subscribe_candidates,
+            audio_track,
+            video_track,
         })
     }
 
@@ -290,27 +348,19 @@ impl RtcEngine {
         self.event_tx.clone()
     }
 
-    /// Ensures audio and video transceivers exist on the publish peer connection,
+    /// Returns a clone of the local microphone audio track.
+    pub fn audio_track(&self) -> Arc<TrackLocalStaticSample> {
+        self.audio_track.clone()
+    }
+
+    /// Returns a clone of the local camera/screen video track.
+    pub fn video_track(&self) -> Arc<TrackLocalStaticSample> {
+        self.video_track.clone()
+    }
+
+    /// Ensures media transceivers exist on the publish peer connection,
     /// creates an offer, sets it as local description and returns it.
     pub async fn create_publish_offer(&self) -> Result<(String, Vec<TrackIntent>), RtcError> {
-        let audio_init = RTCRtpTransceiverInit {
-            direction: RTCRtpTransceiverDirection::Sendrecv,
-            send_encodings: vec![RTCRtpEncodingParameters::default()],
-            ..Default::default()
-        };
-        self.publish_pc
-            .add_transceiver_from_kind(RtpCodecKind::Audio, Some(audio_init))
-            .await?;
-
-        let video_init = RTCRtpTransceiverInit {
-            direction: RTCRtpTransceiverDirection::Sendrecv,
-            send_encodings: vec![RTCRtpEncodingParameters::default()],
-            ..Default::default()
-        };
-        self.publish_pc
-            .add_transceiver_from_kind(RtpCodecKind::Video, Some(video_init))
-            .await?;
-
         let offer = self.publish_pc.create_offer(None).await?;
         self.publish_pc.set_local_description(offer.clone()).await?;
 
@@ -356,7 +406,9 @@ impl RtcEngine {
         self.subscribe_pc.set_remote_description(offer).await?;
 
         let answer = self.subscribe_pc.create_answer(None).await?;
-        self.subscribe_pc.set_local_description(answer.clone()).await?;
+        self.subscribe_pc
+            .set_local_description(answer.clone())
+            .await?;
 
         Self::drain_pending_candidates(&self.subscribe_pc, &self.pending_subscribe_candidates)
             .await?;
@@ -392,7 +444,12 @@ impl RtcEngine {
                 }
             }
             CandidateTarget::Subscribe => {
-                if self.subscribe_pc.current_remote_description().await.is_some() {
+                if self
+                    .subscribe_pc
+                    .current_remote_description()
+                    .await
+                    .is_some()
+                {
                     self.subscribe_pc.add_ice_candidate(init).await?;
                 } else {
                     self.pending_subscribe_candidates.lock().await.push(init);
@@ -432,7 +489,9 @@ mod tests {
     #[tokio::test]
     async fn create_publish_offer_includes_vp8_and_opus() {
         let (tx, _rx) = mpsc::channel(16);
-        let engine = RtcEngine::new(Vec::new(), tx).await.expect("engine creation");
+        let engine = RtcEngine::new(Vec::new(), tx)
+            .await
+            .expect("engine creation");
 
         let (sdp, intents) = engine
             .create_publish_offer()

@@ -38,3 +38,9 @@ aes-gcm = "0.10"
 hkdf = "0.12"
 sha2 = "0.10"
 subtle = "2.5"
+cpal = "0.15"
+opus = "0.3"
+zenyuv = "0.1"
+
+[build-dependencies]
+cc = "1.4.3"

@@ -125,14 +125,22 @@ pub fn render_meeting_room(app: &mut ConferApp, ui: &mut Ui) {
                         .inner_margin(egui::Margin::symmetric(10.0, 4.0))
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
-                                ui.label(RichText::new("●").size(8.0).color(crate::ui::theme::Theme::EMERALD));
+                                ui.label(
+                                    RichText::new("●")
+                                        .size(8.0)
+                                        .color(crate::ui::theme::Theme::EMERALD),
+                                );
                                 ui.label(
                                     RichText::new(format!("{}ms RTT", app.rtt_ms))
                                         .size(11.0)
                                         .strong()
                                         .color(crate::ui::theme::Theme::TEXT_PRIMARY),
                                 );
-                                ui.label(RichText::new("•").size(9.0).color(crate::ui::theme::Theme::TEXT_MUTED));
+                                ui.label(
+                                    RichText::new("•")
+                                        .size(9.0)
+                                        .color(crate::ui::theme::Theme::TEXT_MUTED),
+                                );
                                 ui.label(
                                     RichText::new(format!("{:.1}% Loss", app.packet_loss_pct))
                                         .size(10.5)
@@ -598,7 +606,7 @@ fn render_screen_share_stage(app: &mut ConferApp, ui: &mut Ui) {
                         is_hand_raised: p.is_hand_raised,
                         is_local: false,
                         is_active_speaker,
-                        local_texture: None,
+                        local_texture: app.remote_video_textures.get(&p.participant_id),
                     };
                     render_single_tile(ui, &remote_props);
                     ui.add_space(8.0);
@@ -658,7 +666,7 @@ fn render_video_grid(app: &ConferApp, ui: &mut Ui) {
             is_hand_raised: p.is_hand_raised,
             is_local: false,
             is_active_speaker: app.active_speaker_ids.contains(&p.participant_id),
-            local_texture: None,
+            local_texture: app.remote_video_textures.get(&p.participant_id),
         });
     }
 

@@ -1,8 +1,9 @@
 use futures_util::{SinkExt, StreamExt};
 use reqwest::Client as HttpClient;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -87,6 +88,9 @@ pub struct ConferClient {
     pub is_connected: Arc<AtomicBool>,
     writer_task: Option<tokio::task::JoinHandle<()>>,
     reader_task: Option<tokio::task::JoinHandle<()>>,
+    /// Stores the instant each ping was sent, keyed by seq, so the UI can
+    /// compute real RTT when the matching `Pong` arrives.
+    pending_pings: Arc<std::sync::Mutex<HashMap<u64, Instant>>>,
 }
 
 impl ConferClient {
@@ -99,6 +103,7 @@ impl ConferClient {
             is_connected: Arc::new(AtomicBool::new(false)),
             writer_task: None,
             reader_task: None,
+            pending_pings: Arc::new(std::sync::Mutex::new(HashMap::new())),
         }
     }
 
@@ -259,6 +264,7 @@ impl ConferClient {
         // Spawn reader task
         let is_connected_reader = is_connected.clone();
         let out_tx_ping = out_tx.clone();
+        let pending_pings_reader = self.pending_pings.clone();
         let reader_task = tokio::spawn(async move {
             let mut ping_interval = tokio::time::interval(Duration::from_secs(5));
             let mut seq = 0u64;
@@ -267,6 +273,7 @@ impl ConferClient {
                 tokio::select! {
                     _ = ping_interval.tick() => {
                         seq += 1;
+                        pending_pings_reader.lock().unwrap().insert(seq, Instant::now());
                         if let Err(e) = out_tx_ping.try_send(ClientMessage::Ping { seq }) {
                             tracing::warn!("signaling reader: failed to enqueue ping: {e}");
                         }
@@ -329,5 +336,19 @@ impl ConferClient {
                 );
             }
         }
+    }
+
+    /// Removes and returns the RTT, in milliseconds, for a completed ping/pong
+    /// exchange. Returns `None` if the seq is unknown or already consumed.
+    pub fn take_rtt_ms(&self, seq: u64) -> Option<u32> {
+        let sent = {
+            let mut guard = self.pending_pings.lock().ok()?;
+            // Prune very old entries (>60s) to avoid unbounded growth on lost pongs.
+            let cutoff = Instant::now() - Duration::from_secs(60);
+            guard.retain(|_, t| *t > cutoff);
+            guard.remove(&seq)
+        }?;
+        let elapsed = sent.elapsed();
+        Some(elapsed.as_millis().try_into().unwrap_or(u32::MAX))
     }
 }

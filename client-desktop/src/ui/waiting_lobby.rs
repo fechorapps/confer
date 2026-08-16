@@ -34,9 +34,7 @@ pub fn render_waiting_lobby(app: &mut ConferApp, ui: &mut Ui) {
                     if ui
                         .add(
                             egui::Button::new(
-                                RichText::new("✕ Leave")
-                                    .size(12.0)
-                                    .color(Color32::WHITE),
+                                RichText::new("✕ Leave").size(12.0).color(Color32::WHITE),
                             )
                             .fill(Theme::CRIMSON)
                             .rounding(Theme::RADIUS_SM),

@@ -1,5 +1,5 @@
-use egui::{Button, Color32, RichText, Stroke, Ui};
 use crate::ui::theme::Theme;
+use egui::{Button, Color32, RichText, Stroke, Ui};
 
 /// Reusable UI Component Primitives for Confer Desktop Client.
 #[allow(dead_code)]
@@ -110,7 +110,12 @@ impl Components {
             let second = parts[1].chars().next().unwrap_or('U').to_uppercase();
             format!("{}{}", first, second)
         } else {
-            trimmed.chars().next().unwrap_or('U').to_uppercase().to_string()
+            trimmed
+                .chars()
+                .next()
+                .unwrap_or('U')
+                .to_uppercase()
+                .to_string()
         }
     }
 }

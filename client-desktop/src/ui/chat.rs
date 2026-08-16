@@ -20,9 +20,7 @@ pub fn render_chat(app: &mut ConferApp, ui: &mut Ui) {
                     if ui
                         .add(
                             egui::Button::new(
-                                RichText::new("✕")
-                                    .size(12.0)
-                                    .color(Theme::TEXT_SECONDARY),
+                                RichText::new("✕").size(12.0).color(Theme::TEXT_SECONDARY),
                             )
                             .fill(Theme::SURFACE_2)
                             .rounding(Theme::RADIUS_SM),
@@ -142,23 +140,20 @@ pub fn render_chat(app: &mut ConferApp, ui: &mut Ui) {
                     );
                     let send_clicked = ui
                         .add(
-                            egui::Button::new(
-                                RichText::new("Send")
-                                    .strong()
-                                    .color(Color32::WHITE),
-                            )
-                            .fill(if is_chat_allowed {
-                                Theme::PRIMARY
-                            } else {
-                                Theme::SURFACE_3
-                            })
-                            .rounding(Theme::RADIUS_SM),
+                            egui::Button::new(RichText::new("Send").strong().color(Color32::WHITE))
+                                .fill(if is_chat_allowed {
+                                    Theme::PRIMARY
+                                } else {
+                                    Theme::SURFACE_3
+                                })
+                                .rounding(Theme::RADIUS_SM),
                         )
                         .clicked();
 
                     if is_chat_allowed
                         && (send_clicked
-                            || (text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))))
+                            || (text_edit.lost_focus()
+                                && ui.input(|i| i.key_pressed(egui::Key::Enter))))
                         && !app.chat_input.trim().is_empty()
                     {
                         app.send_chat();
