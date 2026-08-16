@@ -782,7 +782,20 @@ impl ConferApp {
         self.client.send_message(ClientMessage::WhiteboardStroke {
             stroke: stroke.clone(),
         });
+        self.store_whiteboard_stroke(stroke);
+    }
+
+    /// Store a whiteboard stroke (own or remote), bounding per-stroke point
+    /// count and total stroke count so a flood of WhiteboardStroke messages
+    /// can't exhaust client memory or per-frame render time.
+    fn store_whiteboard_stroke(&mut self, mut stroke: WhiteboardStrokeDto) {
+        if let WhiteboardShapeDto::Pen { points } = &mut stroke.shape {
+            points.truncate(5000);
+        }
         self.whiteboard_strokes.push(stroke);
+        if self.whiteboard_strokes.len() > 5000 {
+            self.whiteboard_strokes.remove(0);
+        }
     }
 
     pub fn commit_whiteboard_text(&mut self, pos: Pos2) {
@@ -1197,7 +1210,7 @@ impl ConferApp {
                 }
                 ServerMessage::WhiteboardStroke { stroke } => {
                     if !self.whiteboard_strokes.iter().any(|s| s.id == stroke.id) {
-                        self.whiteboard_strokes.push(stroke);
+                        self.store_whiteboard_stroke(stroke);
                     }
                 }
                 ServerMessage::WhiteboardClear => {
