@@ -142,6 +142,9 @@ pub struct ConferApp {
     pub whiteboard_drag_current: Option<Pos2>,
     pub whiteboard_text_pos: Option<Pos2>,
     pub whiteboard_text_input: String,
+    pub whiteboard_zoom: f32,
+    pub whiteboard_pan: egui::Vec2,
+    pub show_stage_filmstrip: bool,
 
     // Polls Engine & State
     pub polls: Vec<PollDto>,
@@ -272,6 +275,9 @@ impl ConferApp {
             whiteboard_drag_current: None,
             whiteboard_text_pos: None,
             whiteboard_text_input: "".to_string(),
+            whiteboard_zoom: 1.0,
+            whiteboard_pan: egui::Vec2::ZERO,
+            show_stage_filmstrip: true,
 
             polls: Vec::new(),
             user_poll_votes: HashMap::new(),

@@ -136,6 +136,62 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
 
                     ui.separator();
 
+                    // --- Zoom Controls ---
+                    ui.label(
+                        RichText::new("Zoom:")
+                            .size(11.0)
+                            .color(Color32::from_rgb(148, 163, 184)),
+                    );
+                    if ui
+                        .add(
+                            egui::Button::new(RichText::new("－").size(11.0).color(Color32::WHITE))
+                                .fill(Color32::from_rgb(26, 29, 33))
+                                .rounding(4.0),
+                        )
+                        .on_hover_text("Zoom Out")
+                        .clicked()
+                    {
+                        app.whiteboard_zoom = (app.whiteboard_zoom * 0.85).max(0.25);
+                    }
+
+                    ui.label(
+                        RichText::new(format!("{:.0}%", app.whiteboard_zoom * 100.0))
+                            .size(11.0)
+                            .strong()
+                            .color(Color32::WHITE),
+                    );
+
+                    if ui
+                        .add(
+                            egui::Button::new(RichText::new("＋").size(11.0).color(Color32::WHITE))
+                                .fill(Color32::from_rgb(26, 29, 33))
+                                .rounding(4.0),
+                        )
+                        .on_hover_text("Zoom In")
+                        .clicked()
+                    {
+                        app.whiteboard_zoom = (app.whiteboard_zoom * 1.15).min(4.0);
+                    }
+
+                    if app.whiteboard_zoom != 1.0
+                        && ui
+                            .add(
+                                egui::Button::new(
+                                    RichText::new("1:1")
+                                        .size(10.0)
+                                        .color(Color32::from_rgb(148, 163, 184)),
+                                )
+                                .fill(Color32::from_rgb(26, 29, 33))
+                                .rounding(4.0),
+                            )
+                            .on_hover_text("Reset Zoom (100%)")
+                            .clicked()
+                    {
+                        app.whiteboard_zoom = 1.0;
+                    }
+
+                    ui.separator();
+
                     // --- Undo & Clear ---
                     if ui
                         .add(
@@ -293,11 +349,34 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
             x += grid_spacing;
         }
 
+        let zoom = app.whiteboard_zoom.clamp(0.25, 4.0);
+
+        // Interactive mouse wheel zoom on hover
+        if response.hovered() {
+            let scroll = ui.input(|i| i.raw_scroll_delta);
+            if scroll.y != 0.0 {
+                let factor = if scroll.y > 0.0 { 1.08 } else { 0.92 };
+                app.whiteboard_zoom = (app.whiteboard_zoom * factor).clamp(0.25, 4.0);
+            }
+        }
+
+        // Middle-click or right-click canvas panning
+        if response.dragged_by(egui::PointerButton::Middle)
+            || response.dragged_by(egui::PointerButton::Secondary)
+        {
+            app.whiteboard_pan += response.drag_delta();
+        }
+
+        let pan = app.whiteboard_pan;
+        let to_screen = move |x: f32, y: f32| -> Pos2 {
+            canvas_rect.min + pan + Vec2::new(x * zoom, y * zoom)
+        };
+
         // --- Handle User Interactions on Canvas ---
         if let Some(pointer_pos) = response.interact_pointer_pos() {
             if canvas_rect.contains(pointer_pos) {
-                let rel_pos = pointer_pos - canvas_rect.min;
-                let rel_pos2 = Pos2::new(rel_pos.x, rel_pos.y);
+                let rel_pos = pointer_pos - canvas_rect.min - app.whiteboard_pan;
+                let rel_pos2 = Pos2::new(rel_pos.x / zoom, rel_pos.y / zoom);
 
                 match app.whiteboard_tool {
                     WhiteboardTool::Pen => {
@@ -359,7 +438,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                             if let (Some(start), Some(end)) =
                                 (app.whiteboard_drag_start, app.whiteboard_drag_current)
                             {
-                                if start.distance(end) > 2.0 {
+                                if (start.x - end.x).abs() > 2.0 && (start.y - end.y).abs() > 2.0 {
                                     let stroke = WhiteboardStrokeDto {
                                         id: Uuid::new_v4(),
                                         participant_id: app
@@ -428,10 +507,10 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                         } else if response.dragged() {
                             app.whiteboard_drag_current = Some(rel_pos2);
                         } else if response.drag_stopped() {
-                            if let (Some(center), Some(edge)) =
+                            if let (Some(start), Some(end)) =
                                 (app.whiteboard_drag_start, app.whiteboard_drag_current)
                             {
-                                let radius = center.distance(edge);
+                                let radius = start.distance(end);
                                 if radius > 2.0 {
                                     let stroke = WhiteboardStrokeDto {
                                         id: Uuid::new_v4(),
@@ -439,7 +518,7 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                                             .my_participant_id
                                             .unwrap_or(Uuid::nil()),
                                         shape: WhiteboardShapeDto::Circle {
-                                            center: [center.x, center.y],
+                                            center: [start.x, start.y],
                                             radius,
                                         },
                                         color: WhiteboardColorDto::new(
@@ -481,37 +560,38 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                 stroke.color.b,
                 stroke.color.a,
             );
-            let egui_stroke = Stroke::new(stroke.stroke_width, color);
+            let scaled_width = (stroke.stroke_width * zoom).max(1.0);
+            let egui_stroke = Stroke::new(scaled_width, color);
 
             match &stroke.shape {
                 WhiteboardShapeDto::Pen { points } => {
                     for pair in points.windows(2) {
-                        let p1 = canvas_rect.min + Vec2::new(pair[0][0], pair[0][1]);
-                        let p2 = canvas_rect.min + Vec2::new(pair[1][0], pair[1][1]);
+                        let p1 = to_screen(pair[0][0], pair[0][1]);
+                        let p2 = to_screen(pair[1][0], pair[1][1]);
                         painter.line_segment([p1, p2], egui_stroke);
-                        painter.circle_filled(p1, stroke.stroke_width * 0.5, color);
+                        painter.circle_filled(p1, scaled_width * 0.5, color);
                     }
                     if let Some(last) = points.last() {
-                        let p = canvas_rect.min + Vec2::new(last[0], last[1]);
-                        painter.circle_filled(p, stroke.stroke_width * 0.5, color);
+                        let p = to_screen(last[0], last[1]);
+                        painter.circle_filled(p, scaled_width * 0.5, color);
                     }
                 }
 
                 WhiteboardShapeDto::Line { start, end } => {
-                    let p1 = canvas_rect.min + Vec2::new(start[0], start[1]);
-                    let p2 = canvas_rect.min + Vec2::new(end[0], end[1]);
+                    let p1 = to_screen(start[0], start[1]);
+                    let p2 = to_screen(end[0], end[1]);
                     painter.line_segment([p1, p2], egui_stroke);
                 }
 
                 WhiteboardShapeDto::Rectangle { start, end } => {
-                    let p1 = canvas_rect.min + Vec2::new(start[0], start[1]);
-                    let p2 = canvas_rect.min + Vec2::new(end[0], end[1]);
+                    let p1 = to_screen(start[0], start[1]);
+                    let p2 = to_screen(end[0], end[1]);
                     painter.rect_stroke(Rect::from_two_pos(p1, p2), 2.0, egui_stroke);
                 }
 
                 WhiteboardShapeDto::Circle { center, radius } => {
-                    let c = canvas_rect.min + Vec2::new(center[0], center[1]);
-                    painter.circle_stroke(c, *radius, egui_stroke);
+                    let c = to_screen(center[0], center[1]);
+                    painter.circle_stroke(c, *radius * zoom, egui_stroke);
                 }
 
                 WhiteboardShapeDto::Text {
@@ -519,12 +599,12 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                     text,
                     font_size,
                 } => {
-                    let p = canvas_rect.min + Vec2::new(pos[0], pos[1]);
+                    let p = to_screen(pos[0], pos[1]);
                     painter.text(
                         p,
                         Align2::LEFT_TOP,
                         text,
-                        FontId::proportional(*font_size),
+                        FontId::proportional((*font_size * zoom).max(8.0)),
                         color,
                     );
                 }
@@ -533,16 +613,17 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
 
         // --- Render In-Progress Drawing Preview ---
         let current_color = app.whiteboard_color;
-        let current_stroke = Stroke::new(app.whiteboard_stroke_width, current_color);
+        let preview_width = (app.whiteboard_stroke_width * zoom).max(1.0);
+        let current_stroke = Stroke::new(preview_width, current_color);
 
         match app.whiteboard_tool {
             WhiteboardTool::Pen => {
                 let pts = &app.whiteboard_current_points;
                 for pair in pts.windows(2) {
-                    let p1 = canvas_rect.min + Vec2::new(pair[0].x, pair[0].y);
-                    let p2 = canvas_rect.min + Vec2::new(pair[1].x, pair[1].y);
+                    let p1 = to_screen(pair[0].x, pair[0].y);
+                    let p2 = to_screen(pair[1].x, pair[1].y);
                     painter.line_segment([p1, p2], current_stroke);
-                    painter.circle_filled(p1, app.whiteboard_stroke_width * 0.5, current_color);
+                    painter.circle_filled(p1, preview_width * 0.5, current_color);
                 }
             }
 
@@ -550,8 +631,8 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                 if let (Some(start), Some(end)) =
                     (app.whiteboard_drag_start, app.whiteboard_drag_current)
                 {
-                    let p1 = canvas_rect.min + Vec2::new(start.x, start.y);
-                    let p2 = canvas_rect.min + Vec2::new(end.x, end.y);
+                    let p1 = to_screen(start.x, start.y);
+                    let p2 = to_screen(end.x, end.y);
                     painter.line_segment([p1, p2], current_stroke);
                 }
             }
@@ -560,25 +641,25 @@ pub fn render_whiteboard(app: &mut ConferApp, ui: &mut Ui) {
                 if let (Some(start), Some(end)) =
                     (app.whiteboard_drag_start, app.whiteboard_drag_current)
                 {
-                    let p1 = canvas_rect.min + Vec2::new(start.x, start.y);
-                    let p2 = canvas_rect.min + Vec2::new(end.x, end.y);
+                    let p1 = to_screen(start.x, start.y);
+                    let p2 = to_screen(end.x, end.y);
                     painter.rect_stroke(Rect::from_two_pos(p1, p2), 2.0, current_stroke);
                 }
             }
 
             WhiteboardTool::Circle => {
-                if let (Some(center), Some(edge)) =
+                if let (Some(start), Some(end)) =
                     (app.whiteboard_drag_start, app.whiteboard_drag_current)
                 {
-                    let radius = center.distance(edge);
-                    let c = canvas_rect.min + Vec2::new(center.x, center.y);
+                    let radius = start.distance(end) * zoom;
+                    let c = to_screen(start.x, start.y);
                     painter.circle_stroke(c, radius, current_stroke);
                 }
             }
 
             WhiteboardTool::Text => {
                 if let Some(pos) = app.whiteboard_text_pos {
-                    let p = canvas_rect.min + Vec2::new(pos.x, pos.y);
+                    let p = to_screen(pos.x, pos.y);
                     painter.circle_filled(p, 4.0, Color32::from_rgb(56, 189, 248));
                     painter.text(
                         p + Vec2::new(6.0, -8.0),
