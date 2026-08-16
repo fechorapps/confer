@@ -356,7 +356,7 @@ fn render_studio_viewfinder_card(
             let cam_bg = if app.is_camera_off {
                 Theme::CRIMSON
             } else {
-                Color32::from_rgb(16, 185, 129)
+                Theme::EMERALD
             };
             let cam_text = if app.is_camera_off {
                 "📷 Cam Off"
@@ -385,7 +385,7 @@ fn render_studio_viewfinder_card(
             let mic_bg = if app.is_mic_muted {
                 Theme::CRIMSON
             } else {
-                Color32::from_rgb(16, 185, 129)
+                Theme::EMERALD
             };
             let mic_text = if app.is_mic_muted {
                 "🔇 Mic Muted"
@@ -471,9 +471,9 @@ fn render_studio_viewfinder_card(
                 } else if i > 16 {
                     Color32::from_rgb(244, 63, 94) // Red Peak (#F43F5E)
                 } else if i > 12 {
-                    Color32::from_rgb(245, 158, 11) // Amber Mid-High (#F59E0B)
+                    Theme::AMBER // Amber Mid-High (#F59E0B)
                 } else {
-                    Color32::from_rgb(16, 185, 129) // Emerald Normal (#10B981)
+                    Theme::EMERALD // Emerald Normal (#10B981)
                 };
                 let seg_rect = ui
                     .allocate_exact_size(Vec2::new(segment_w, 8.0), egui::Sense::hover())
@@ -500,7 +500,7 @@ fn render_studio_viewfinder_card(
                 let (swatch_color, bg) = if is_active {
                     (Color32::WHITE, Theme::PRIMARY)
                 } else {
-                    (Color32::from_rgb(148, 163, 184), Theme::SURFACE_2)
+                    (Theme::TEXT_SECONDARY, Theme::SURFACE_2)
                 };
                 let text_color = if is_active {
                     Color32::WHITE
@@ -641,7 +641,7 @@ fn render_meeting_cockpit_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
             // Host Chip (Electric Blue / Amber Star)
             let is_host = app.user_email == "host@confer.local";
             let host_bg = if is_host {
-                Color32::from_rgb(2, 132, 199)
+                Theme::BORDER_ACTIVE
             } else {
                 Theme::SURFACE_2
             };
@@ -652,7 +652,7 @@ fn render_meeting_cockpit_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
                         if is_host {
                             Color32::WHITE
                         } else {
-                            Color32::from_rgb(251, 191, 36)
+                            Theme::AMBER_LIGHT
                         },
                     ))
                     .fill(host_bg)
