@@ -163,6 +163,16 @@ pub struct ConferApp {
     pub connect_rx: Option<mpsc::UnboundedReceiver<Result<ConnectSuccess, String>>>,
     /// WebRTC engine, created after the signaling connection is established.
     pub rtc_engine: Option<Arc<tokio::sync::Mutex<RtcEngine>>>,
+
+    /// Selected cockpit tab in the Pre-Flight Lobby (Host vs Join)
+    pub lobby_action_tab: LobbyActionTab,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LobbyActionTab {
+    #[default]
+    Host,
+    Join,
 }
 
 impl ConferApp {
@@ -265,6 +275,7 @@ impl ConferApp {
             tokio_rt,
             connect_rx: None,
             rtc_engine: None,
+            lobby_action_tab: LobbyActionTab::default(),
         }
     }
 

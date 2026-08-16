@@ -1,5 +1,5 @@
 use egui::{Color32, Pos2, RichText, Stroke, Ui, Vec2};
-use crate::app::ConferApp;
+use crate::app::{ConferApp, LobbyActionTab};
 use crate::media::filters::VideoFilter;
 use crate::media::VirtualBackgroundMode;
 use crate::ui::components::Components;
@@ -110,11 +110,11 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
                         ui.set_width(content_w);
                         render_studio_viewfinder_card(app, ui, content_w, persona_color, &user_initials);
                         ui.add_space(16.0);
-                        render_meeting_cards_column(app, ui, content_w);
+                        render_meeting_cockpit_column(app, ui, content_w);
                     });
                 } else {
                     // --- EXPANDED VIEW (2-COLUMN GRID) ---
-                    let left_col_w = (content_w * 0.54).max(380.0);
+                    let left_col_w = (content_w * 0.52).max(380.0);
                     let right_col_w = (content_w - left_col_w - 24.0).max(340.0);
 
                     ui.vertical(|ui| {
@@ -126,7 +126,7 @@ pub fn render_lobby(app: &mut ConferApp, ui: &mut Ui) {
 
                     ui.vertical(|ui| {
                         ui.set_width(right_col_w);
-                        render_meeting_cards_column(app, ui, right_col_w);
+                        render_meeting_cockpit_column(app, ui, right_col_w);
                     });
                 }
 
@@ -213,7 +213,7 @@ fn render_studio_viewfinder_card(
         // Overlay Subtle Studio Viewfinder Corner Reticles
         let cr = canvas_response.response.rect;
         let p = ui.painter();
-        let reticle_color = Color32::from_rgba_premultiplied(255, 255, 255, 40);
+        let reticle_color = Color32::from_rgba_premultiplied(255, 255, 255, 45);
         let reticle_stroke = Stroke::new(1.5_f32, reticle_color);
         let r_len = 12.0_f32;
         let r_pad = 8.0_f32;
@@ -361,8 +361,8 @@ fn render_studio_viewfinder_card(
     });
 }
 
-/// Renders the Profile Persona, Host Meeting, and Join Meeting Cards with Status Feedback
-fn render_meeting_cards_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
+/// Renders the Unified High-Conviction Hero Action Cockpit Column
+fn render_meeting_cockpit_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
     let card_inner_w = (col_w - 40.0).max(100.0);
 
     // Global Error Banner at top of Action Column if present
@@ -438,89 +438,131 @@ fn render_meeting_cards_column(app: &mut ConferApp, ui: &mut Ui, col_w: f32) {
 
     ui.add_space(16.0);
 
-    // Card 2: Host New Instant Meeting (Vibrant Sapphire/Electric Blue)
+    // Card 2: Bolder Segmented Hero Meeting Cockpit (Host vs Join)
     Theme::focused_card_frame(ui.style()).show(ui, |ui| {
+        // High-Conviction Cockpit Segmented Switcher
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Start New Meeting").size(15.0).strong().color(Color32::WHITE));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                egui::Frame::group(ui.style())
-                    .fill(Color32::from_rgb(12, 74, 110))
-                    .stroke(Stroke::new(1.0_f32, Theme::PRIMARY_LIGHT))
-                    .rounding(Theme::RADIUS_PILL)
-                    .inner_margin(egui::Margin::symmetric(8.0, 2.0))
-                    .show(ui, |ui| {
-                        ui.label(RichText::new("HOST (Ctrl+Enter)").size(9.5).strong().color(Theme::PRIMARY_LIGHT));
-                    });
-            });
-        });
+            let tab_w = ((card_inner_w - 8.0) / 2.0).max(100.0);
 
-        ui.add_space(4.0);
-        ui.label(RichText::new("Create an instant encrypted room with WebRTC SFU media routing.").size(11.5).color(Theme::TEXT_SECONDARY));
-        ui.add_space(10.0);
-
-        // Meeting Title Input
-        ui.label(RichText::new("Meeting Topic:").size(11.5).strong().color(Color32::from_rgb(203, 213, 225)));
-        ui.add_space(3.0);
-        ui.add_sized(
-            Vec2::new(card_inner_w, 32.0),
-            egui::TextEdit::singleline(&mut app.meeting_title_input)
-                .hint_text("e.g. Sprint Planning, Architecture Review...")
-                .margin(egui::Margin::symmetric(10.0, 6.0)),
-        );
-
-        ui.add_space(12.0);
-
-        // Full-Width Start Meeting Action Button with Disabled Guard & Spinner
-        ui.add_enabled_ui(!app.is_connecting, |ui| {
-            let btn_text = if app.is_connecting {
-                "⏳ Connecting to Server..."
-            } else {
-                "Start Meeting Now (Ctrl+Enter)"
-            };
-
+            // Tab 1: Host Instant Meeting
+            let is_host_tab = app.lobby_action_tab == LobbyActionTab::Host;
+            let host_tab_bg = if is_host_tab { Theme::PRIMARY } else { Theme::SURFACE_2 };
+            let host_tab_color = if is_host_tab { Color32::WHITE } else { Theme::TEXT_SECONDARY };
             if ui.add_sized(
-                Vec2::new(card_inner_w, 38.0),
-                Components::primary_button(btn_text, 13.0),
+                Vec2::new(tab_w, 34.0),
+                egui::Button::new(RichText::new("⚡ Start New Meeting").size(12.0).strong().color(host_tab_color))
+                    .fill(host_tab_bg)
+                    .rounding(Theme::RADIUS_SM),
             ).clicked() {
-                app.trigger_create_meeting();
+                app.lobby_action_tab = LobbyActionTab::Host;
+            }
+
+            // Tab 2: Join by PIN
+            let is_join_tab = app.lobby_action_tab == LobbyActionTab::Join;
+            let join_tab_bg = if is_join_tab { Theme::PRIMARY } else { Theme::SURFACE_2 };
+            let join_tab_color = if is_join_tab { Color32::WHITE } else { Theme::TEXT_SECONDARY };
+            if ui.add_sized(
+                Vec2::new(tab_w, 34.0),
+                egui::Button::new(RichText::new("🔗 Join with Code").size(12.0).strong().color(join_tab_color))
+                    .fill(join_tab_bg)
+                    .rounding(Theme::RADIUS_SM),
+            ).clicked() {
+                app.lobby_action_tab = LobbyActionTab::Join;
             }
         });
-    });
 
-    ui.add_space(16.0);
+        ui.add_space(14.0);
 
-    // Card 3: Join Meeting by 6-Character Code
-    Theme::card_frame(ui.style()).show(ui, |ui| {
-        ui.label(RichText::new("Join with Code").size(15.0).strong().color(Theme::TEXT_PRIMARY));
-        ui.add_space(4.0);
-        ui.label(RichText::new("Enter the 6-character room code provided by the meeting host:").size(11.5).color(Theme::TEXT_SECONDARY));
-        ui.add_space(10.0);
+        match app.lobby_action_tab {
+            LobbyActionTab::Host => {
+                // --- HOST MODE VIEW ---
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("Instant Meeting Room").size(14.0).strong().color(Theme::TEXT_PRIMARY));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        egui::Frame::group(ui.style())
+                            .fill(Color32::from_rgb(12, 74, 110))
+                            .stroke(Stroke::new(1.0_f32, Theme::PRIMARY_LIGHT))
+                            .rounding(Theme::RADIUS_PILL)
+                            .inner_margin(egui::Margin::symmetric(8.0, 2.0))
+                            .show(ui, |ui| {
+                                ui.label(RichText::new("HOST").size(9.5).strong().color(Theme::PRIMARY_LIGHT));
+                            });
+                    });
+                });
 
-        // Responsive Join Code Row
-        ui.horizontal(|ui| {
-            let btn_w = 110.0_f32;
-            let input_w = (card_inner_w - btn_w - 10.0).max(80.0);
+                ui.add_space(4.0);
+                ui.label(RichText::new("Launch a private, encrypted SFU room with zero setup delay.").size(11.5).color(Theme::TEXT_SECONDARY));
+                ui.add_space(12.0);
 
-            let edit_res = ui.add_sized(
-                Vec2::new(input_w, 36.0),
-                egui::TextEdit::singleline(&mut app.join_code_input)
-                    .hint_text("PIN (e.g. ABC123)")
-                    .font(egui::FontId::monospace(14.0))
-                    .margin(egui::Margin::symmetric(10.0, 6.0)),
-            );
-            app.join_code_input = app.join_code_input.to_uppercase();
+                ui.label(RichText::new("Meeting Topic:").size(11.5).strong().color(Color32::from_rgb(203, 213, 225)));
+                ui.add_space(4.0);
+                let topic_edit = ui.add_sized(
+                    Vec2::new(card_inner_w, 34.0),
+                    egui::TextEdit::singleline(&mut app.meeting_title_input)
+                        .hint_text("e.g. Architecture Sync, Sprint Planning...")
+                        .margin(egui::Margin::symmetric(10.0, 6.0)),
+                );
 
-            let can_join = !app.join_code_input.trim().is_empty() && !app.is_connecting;
+                ui.add_space(14.0);
 
-            ui.add_enabled_ui(can_join, |ui| {
-                let join_text = if app.is_connecting { "⏳ Joining..." } else { "Join Room" };
-                if (ui.add_sized(
-                    Vec2::new(btn_w, 36.0),
-                    Components::primary_button(join_text, 12.5),
-                ).clicked() || (edit_res.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))) && can_join {
-                    app.trigger_join_meeting();
-                }
-            });
-        });
+                ui.add_enabled_ui(!app.is_connecting, |ui| {
+                    let btn_text = if app.is_connecting {
+                        "⏳ Connecting to Server..."
+                    } else {
+                        "Start Meeting Now (Ctrl+Enter)"
+                    };
+
+                    if (ui.add_sized(
+                        Vec2::new(card_inner_w, 40.0),
+                        Components::primary_button(btn_text, 13.5),
+                    ).clicked() || (topic_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))) && !app.is_connecting {
+                        app.trigger_create_meeting();
+                    }
+                });
+
+                ui.add_space(10.0);
+                ui.vertical_centered(|ui| {
+                    ui.label(RichText::new("🔒 SFrame Zero-Knowledge E2EE • WebRTC SFU").size(10.5).color(Theme::TEXT_MUTED));
+                });
+            }
+            LobbyActionTab::Join => {
+                // --- JOIN MODE VIEW ---
+                ui.label(RichText::new("Enter Meeting PIN").size(14.0).strong().color(Theme::TEXT_PRIMARY));
+                ui.add_space(4.0);
+                ui.label(RichText::new("Enter the 6-character room code shared by your meeting host:").size(11.5).color(Theme::TEXT_SECONDARY));
+                ui.add_space(12.0);
+
+                ui.label(RichText::new("Room Code:").size(11.5).strong().color(Color32::from_rgb(203, 213, 225)));
+                ui.add_space(4.0);
+
+                let edit_res = ui.add_sized(
+                    Vec2::new(card_inner_w, 38.0),
+                    egui::TextEdit::singleline(&mut app.join_code_input)
+                        .hint_text("PIN (e.g. ABC123)")
+                        .font(egui::FontId::monospace(15.0))
+                        .margin(egui::Margin::symmetric(12.0, 8.0)),
+                );
+                app.join_code_input = app.join_code_input.to_uppercase();
+
+                ui.add_space(14.0);
+
+                let can_join = !app.join_code_input.trim().is_empty() && !app.is_connecting;
+
+                ui.add_enabled_ui(can_join, |ui| {
+                    let join_text = if app.is_connecting { "⏳ Joining Meeting..." } else { "Join Room (Enter)" };
+                    if (ui.add_sized(
+                        Vec2::new(card_inner_w, 40.0),
+                        Components::primary_button(join_text, 13.5),
+                    ).clicked() || (edit_res.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))) && can_join {
+                        app.trigger_join_meeting();
+                    }
+                });
+
+                ui.add_space(10.0);
+                ui.vertical_centered(|ui| {
+                    ui.label(RichText::new("Ask the host for the 6-character room code").size(10.5).color(Theme::TEXT_MUTED));
+                });
+            }
+        }
     });
 }
