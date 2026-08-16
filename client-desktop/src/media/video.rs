@@ -25,7 +25,6 @@ const VIDEO_SSRC: u32 = 2222222222;
 // TODO: negotiate the VP8 payload type from the SDP answer instead of
 // hard-coding the common dynamic value 96.
 const VP8_PAYLOAD_TYPE: u8 = 96;
-const VIDEO_CLOCK_RATE: u32 = 90_000;
 
 /// Errors that can occur while building or running the video pipeline.
 #[derive(Debug, thiserror::Error)]
@@ -82,8 +81,6 @@ impl VideoEncoder {
             };
 
             let mut yuv_ctx = zenyuv::YuvContext::new(zenyuv::Range::Full, zenyuv::Matrix::Bt601);
-            let mut timestamp: u32 = 0;
-            let samples_per_frame = VIDEO_CLOCK_RATE / fps;
 
             while let Some(rgb) = frame_rx.recv().await {
                 if shutdown_for_task.load(Ordering::Relaxed) {
@@ -126,8 +123,6 @@ impl VideoEncoder {
                         tracing::warn!("vp8 encode error: {e}");
                     }
                 }
-
-                timestamp = timestamp.wrapping_add(samples_per_frame);
             }
         });
 

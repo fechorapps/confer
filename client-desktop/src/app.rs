@@ -1341,11 +1341,22 @@ impl eframe::App for ConferApp {
                 // If not sharing screen, publish local camera frame to WebRTC track
                 if !self.is_screen_sharing {
                     if let Some(tx) = &self.local_frame_tx {
-                        let mut rgb = Vec::with_capacity(frame.width() * frame.height() * 3);
-                        for p in &frame.pixels {
-                            rgb.push(p.r());
-                            rgb.push(p.g());
-                            rgb.push(p.b());
+                        // The hardware camera may return a resolution other than the
+                        // encoder's fixed 320x180 (e.g. "closest match" webcam modes),
+                        // so always resample to the exact encoder dimensions rather
+                        // than assuming `frame` is already 320x180.
+                        let img_w = frame.width();
+                        let img_h = frame.height();
+                        let mut rgb = Vec::with_capacity(320 * 180 * 3);
+                        for y in 0..180 {
+                            let src_y = (y * img_h) / 180;
+                            for x in 0..320 {
+                                let src_x = (x * img_w) / 320;
+                                let p = frame.pixels[src_y * img_w + src_x];
+                                rgb.push(p.r());
+                                rgb.push(p.g());
+                                rgb.push(p.b());
+                            }
                         }
                         let _ = tx.try_send(rgb);
                     }
